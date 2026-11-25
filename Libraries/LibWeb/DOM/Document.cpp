@@ -11577,7 +11577,7 @@ Document::StepsToFireBeforeunloadResult Document::steps_to_fire_beforeunload(boo
         // 1. Set unloadPromptShown to true.
         unload_prompt_shown = true;
 
-        // FIXME: 2. Invoke WebDriver BiDi user prompt opened with document's relevant global object, "beforeunload", and "".
+        // 2. The browser process reports the prompt when it receives the request.
         // 3. Ask the user to confirm that they wish to unload the document, and pause while waiting for the user's response.
         auto top_level_traversable = page().top_level_traversable();
         auto top_level_origin = top_level_traversable->active_document_origin();
@@ -11588,13 +11588,14 @@ Document::StepsToFireBeforeunloadResult Document::steps_to_fire_beforeunload(boo
             ? MUST(String::formatted("{}://", top_level_url->scheme()))
             : top_level_origin->serialize();
         HTML::TemporaryExecutionContext context { relevant_settings_object() };
-        auto confirmed = page().did_request_before_unload(source, event_loop);
+        auto context_id = navigable() ? navigable()->id() : top_level_traversable->id();
+        auto confirmed = page().did_request_before_unload(context_id, source, event_loop);
 
         // 4. If the user did not confirm the page navigation, set unloadPromptCanceled to true.
         if (!confirmed)
             unload_prompt_canceled = true;
 
-        // FIXME: 5. Invoke WebDriver BiDi user prompt closed with document's relevant global object and true if unloadPromptCanceled is false or false otherwise.
+        // 5. The browser process reports the result when it closes the prompt.
     }
 
     // 7. Decrease document's unload counter by 1.

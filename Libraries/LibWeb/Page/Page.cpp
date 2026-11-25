@@ -1344,10 +1344,11 @@ static auto spin_event_loop_until_dialog_closed(Page& page, HTML::EventLoop* eve
     return (page.*response).release_value();
 }
 
-void Page::did_request_alert(Utf16String const& message)
+void Page::did_request_alert(HTML::CrossProcessId navigable_id, Utf16String const& message)
 {
     m_pending_dialog = PendingDialog::Alert;
-    m_client->page_did_request_alert(message);
+    m_pending_dialog_is_remote = false;
+    m_client->page_did_request_alert(navigable_id, message);
 
     if (!message.is_empty())
         m_pending_dialog_text = message;
@@ -1363,10 +1364,11 @@ void Page::alert_closed()
     }
 }
 
-bool Page::did_request_before_unload(String const& source, HTML::EventLoop& event_loop)
+bool Page::did_request_before_unload(HTML::CrossProcessId navigable_id, String const& source, HTML::EventLoop& event_loop)
 {
     m_pending_dialog = PendingDialog::BeforeUnload;
-    m_client->page_did_request_before_unload(source);
+    m_pending_dialog_is_remote = false;
+    m_client->page_did_request_before_unload(navigable_id, source);
 
     return spin_event_loop_until_dialog_closed<&Page::m_pending_before_unload_response>(*this, &event_loop);
 }
@@ -1379,10 +1381,11 @@ void Page::before_unload_closed(bool accepted)
     }
 }
 
-bool Page::did_request_confirm(Utf16String const& message)
+bool Page::did_request_confirm(HTML::CrossProcessId navigable_id, Utf16String const& message)
 {
     m_pending_dialog = PendingDialog::Confirm;
-    m_client->page_did_request_confirm(message);
+    m_pending_dialog_is_remote = false;
+    m_client->page_did_request_confirm(navigable_id, message);
 
     if (!message.is_empty())
         m_pending_dialog_text = message;
@@ -1398,10 +1401,11 @@ void Page::confirm_closed(bool accepted)
     }
 }
 
-Optional<Utf16String> Page::did_request_prompt(Utf16String const& message, Utf16String const& default_)
+Optional<Utf16String> Page::did_request_prompt(HTML::CrossProcessId navigable_id, Utf16String const& message, Utf16String const& default_)
 {
     m_pending_dialog = PendingDialog::Prompt;
-    m_client->page_did_request_prompt(message, default_);
+    m_pending_dialog_is_remote = false;
+    m_client->page_did_request_prompt(navigable_id, message, default_);
 
     if (!message.is_empty())
         m_pending_dialog_text = message;
@@ -1420,12 +1424,15 @@ void Page::prompt_closed(Optional<Utf16String> response)
 // NB: A dialog blocks the whole tab, so every page of the tab holds the one a document of any of them opened.
 void Page::did_open_dialog_in_another_process(PendingDialog dialog, Utf16String const& message)
 {
+    if (m_pending_dialog != PendingDialog::None && !m_pending_dialog_is_remote)
+        return;
     if (dialog == PendingDialog::None) {
         on_pending_dialog_closed();
         return;
     }
 
     m_pending_dialog = dialog;
+    m_pending_dialog_is_remote = true;
     m_pending_dialog_text.clear();
     if (!message.is_empty())
         m_pending_dialog_text = message;
@@ -1468,6 +1475,7 @@ void Page::accept_dialog(GC::Ref<GC::Function<void()>> on_dialog_closed)
 void Page::on_pending_dialog_closed()
 {
     m_pending_dialog = PendingDialog::None;
+    m_pending_dialog_is_remote = false;
     m_pending_dialog_text.clear();
 
     if (m_on_pending_dialog_closed) {

@@ -299,10 +299,10 @@ private:
     virtual bool page_is_download_canceled(u64 download_id) const override;
     virtual void page_did_change_accessibility_focus(Web::UniqueNodeID) override;
 
-    virtual void page_did_request_alert(Utf16String const&) override;
-    virtual void page_did_request_before_unload(String const&) override;
-    virtual void page_did_request_confirm(Utf16String const&) override;
-    virtual void page_did_request_prompt(Utf16String const&, Utf16String const&) override;
+    virtual void page_did_request_alert(Web::HTML::CrossProcessId, Utf16String const&) override;
+    virtual void page_did_request_before_unload(Web::HTML::CrossProcessId, String const&) override;
+    virtual void page_did_request_confirm(Web::HTML::CrossProcessId, Utf16String const&) override;
+    virtual void page_did_request_prompt(Web::HTML::CrossProcessId, Utf16String const&, Utf16String const&) override;
     virtual void page_did_request_set_prompt_text(Utf16String const&) override;
     virtual void page_did_request_accept_dialog() override;
     virtual void page_did_request_dismiss_dialog() override;

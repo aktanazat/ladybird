@@ -120,11 +120,16 @@ void set_user_prompt_handler(UserPromptHandler user_prompt_handler)
 // https://w3c.github.io/webdriver/#dfn-get-the-prompt-handler
 PromptHandlerConfiguration get_the_prompt_handler(PromptType type)
 {
+    return get_the_prompt_handler(user_prompt_handler_storage(), type);
+}
+
+PromptHandlerConfiguration get_the_prompt_handler(UserPromptHandler const& user_prompt_handler, PromptType type)
+{
     static NeverDestroyed<UserPromptHandler::ValueType> empty_user_prompt_handler;
 
     // 1. If the user prompt handler is null, let handlers be an empty map. Otherwise let handlers be user prompt
     //    handler.
-    auto const& handlers = user_prompt_handler_storage().has_value() ? *user_prompt_handler_storage() : *empty_user_prompt_handler;
+    auto const& handlers = user_prompt_handler.has_value() ? *user_prompt_handler : *empty_user_prompt_handler;
 
     // 2. If handlers contains type return handlers[type].
     if (auto handler = handlers.get(type); handler.has_value())

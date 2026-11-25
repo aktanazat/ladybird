@@ -1600,6 +1600,9 @@ GC::Ref<Speech::SpeechSynthesis> Window::speech_synthesis()
 // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#cannot-show-simple-dialogs
 bool Window::cannot_show_simple_dialogs() const
 {
+    if (!associated_document().navigable())
+        return true;
+
     // 1. If the active sandboxing flag set of window's associated Document has the sandboxed modals flag set, then
     //    return true.
     if (has_flag(associated_document().active_sandboxing_flag_set(), SandboxingFlagSet::SandboxedModals))
@@ -1627,7 +1630,7 @@ void Window::alert(Utf16String const& message)
         return;
 
     // FIXME: Make the remaining steps fully spec compliant.
-    page().did_request_alert(message);
+    page().did_request_alert(associated_document().navigable()->id(), message);
 }
 
 // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#dom-print
@@ -1663,7 +1666,7 @@ bool Window::confirm(Optional<Utf16String> const& message)
 
     // FIXME: Make the remaining steps fully spec compliant.
     // NOTE: `message` has an IDL-provided default value and is never empty.
-    return page().did_request_confirm(*message);
+    return page().did_request_confirm(associated_document().navigable()->id(), *message);
 }
 
 // https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html#dom-prompt
@@ -1674,7 +1677,7 @@ Optional<Utf16String> Window::prompt(Optional<Utf16String> const& message, Optio
         return {};
 
     // FIXME: Make the remaining steps fully spec compliant.
-    auto result = page().did_request_prompt(*message, *default_);
+    auto result = page().did_request_prompt(associated_document().navigable()->id(), *message, *default_);
     if (!result.has_value())
         return {};
     return result;

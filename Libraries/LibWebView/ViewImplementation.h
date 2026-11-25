@@ -57,6 +57,7 @@
 #include <LibWebCommon/Page/EventResult.h>
 #include <LibWebCommon/Page/InputEvent.h>
 #include <LibWebCommon/Page/PageId.h>
+#include <LibWebCommon/Page/PendingDialog.h>
 #include <LibWebCommon/Page/QueuedInputEvent.h>
 #include <LibWebCommon/Page/ScreenWakeLockState.h>
 #include <LibWebCommon/Page/ViewportIsFullscreen.h>
@@ -654,7 +655,8 @@ public:
     void did_close_browsing_context(Badge<WebContentPage>);
     void run_webdriver_user_prompt_handling(Function<void(Web::WebDriver::Response)> on_complete);
     void did_complete_webdriver_user_prompt_handling(Badge<WebContentPage>, u64 request_id, Web::WebDriver::Response);
-    void did_open_user_prompt(Badge<WebContentPage>);
+    bool did_open_user_prompt(Badge<WebContentPage>, WebContentPage&, Web::HTML::CrossProcessId, Web::PendingDialog, Utf16String const& message, Optional<Utf16String> const& default_value = {});
+    void handle_webdriver_user_prompt(Web::HTML::CrossProcessId, bool accept, Utf16String const& user_text, Function<void(Web::WebDriver::Response)>);
 
     // NB: Under WebDriver, a renderer has some of the browser's powers only while it runs a command that needs them.
     bool is_running_webdriver_command_to_select_file(WebContentPage const&, u64 command_id, StringView path) const;
@@ -1222,6 +1224,16 @@ protected:
 
     RefPtr<Core::Promise<LexicalPath>> m_pending_screenshot;
     RefPtr<Core::Promise<String>> m_pending_info_request;
+
+    void close_user_prompt(Web::PendingDialog, bool accepted, Optional<Utf16String> const& user_text = {});
+    void abandon_user_prompt();
+    struct UserPrompt {
+        NonnullRefPtr<WebContentPage> page;
+        Web::HTML::CrossProcessId navigable_id;
+        Web::PendingDialog type;
+        Function<void(Web::WebDriver::Response)> on_handled;
+    };
+    Optional<UserPrompt> m_user_prompt;
 
     u64 m_next_webdriver_user_prompt_request_id { 0 };
     HashMap<u64, Function<void(Web::WebDriver::Response)>> m_pending_webdriver_user_prompt_requests;

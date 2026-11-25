@@ -240,6 +240,8 @@ void WebDriverBrowserConnection::set_current_browsing_context_to_top_level(u64 c
 
 void WebDriverBrowserConnection::set_user_prompt_handler(Web::WebDriver::UserPromptHandler user_prompt_handler)
 {
+    if (m_webdriver_bidi)
+        m_webdriver_bidi->set_user_prompt_handler(user_prompt_handler);
     Application::the().update_webdriver_session_config({}, [user_prompt_handler = move(user_prompt_handler)](auto& config) {
         config.user_prompt_handler = user_prompt_handler;
     });

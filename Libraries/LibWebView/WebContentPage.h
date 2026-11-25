@@ -206,7 +206,6 @@ private:
         Gfx::IntPoint position;
     };
     Optional<ViewPosition> view_position(Web::HTML::CrossProcessId local_root_id, Gfx::IntPoint) const;
-    void did_open_dialog(Web::PendingDialog, Utf16String const& message);
     void maybe_record_history_visit_for_current_load(URL::URL const&, Optional<String> title, StringView reason);
 
     virtual void did_request_navigation_of_navigable(Web::HTML::CrossProcessId navigable_id, Web::HTML::CrossProcessId source_navigable_id, Web::HTML::CrossProcessId source_document_id, Web::HTML::PreparedNavigationDescriptor navigation) override;
@@ -394,10 +393,10 @@ private:
     virtual void did_evaluate_javascript_in_debugger_frame(u64 request_id, Optional<String> error, DebuggerEvaluationResult result) override;
     virtual void did_get_debugger_object_properties(u64 request_id, Optional<String> error, DebuggerObjectProperties properties) override;
     virtual void did_get_debugger_source_positions(u64 request_id, Vector<DebuggerSourcePosition> positions) override;
-    virtual void did_request_alert(Utf16String message) override;
-    virtual void did_request_before_unload(String source) override;
-    virtual void did_request_confirm(Utf16String message) override;
-    virtual void did_request_prompt(Utf16String message, Utf16String default_) override;
+    virtual void did_request_alert(Web::HTML::CrossProcessId navigable_id, Utf16String message) override;
+    virtual void did_request_before_unload(Web::HTML::CrossProcessId navigable_id, String source) override;
+    virtual void did_request_confirm(Web::HTML::CrossProcessId navigable_id, Utf16String message) override;
+    virtual void did_request_prompt(Web::HTML::CrossProcessId navigable_id, Utf16String message, Utf16String default_) override;
     virtual void did_change_favicon(Gfx::ShareableBitmap favicon) override;
     virtual void did_request_delete_all_cookies(u64 request_id, URL::URL url) override;
     Messages::WebContentClient::DidRequestNewWebViewResponse did_request_new_web_view(Web::HTML::ActivateTab activate_tab, Web::HTML::WebViewHints hints, Web::HTML::CrossProcessId current_navigable_id, Utf16String name, bool no_opener, Optional<URL::URL> current_document_base_url);

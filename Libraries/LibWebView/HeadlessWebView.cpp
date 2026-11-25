@@ -6,6 +6,7 @@
 
 #include <LibCore/EventLoop.h>
 #include <LibWebView/HeadlessWebView.h>
+#include <LibWebView/WebDriverBiDi.h>
 #include <LibWebView/PictureInPictureWindow.h>
 
 namespace WebView {
@@ -137,6 +138,14 @@ HeadlessWebView::HeadlessWebView(Core::AnonymousBuffer theme, Web::DevicePixelSi
         m_pending_dialog = Web::PendingDialog::Alert;
     };
 
+    on_request_before_unload = [this](auto const&, auto on_complete) {
+        auto* bidi = WebDriverBiDi::the();
+        if (bidi && bidi->session_state().is_active)
+            m_pending_dialog = Web::PendingDialog::BeforeUnload;
+        else
+            on_complete(true);
+    };
+
     on_request_confirm = [this](auto const&) {
         m_pending_dialog = Web::PendingDialog::Confirm;
     };
@@ -153,8 +162,7 @@ HeadlessWebView::HeadlessWebView(Core::AnonymousBuffer theme, Web::DevicePixelSi
     on_request_accept_dialog = [this]() {
         switch (m_pending_dialog) {
         case Web::PendingDialog::None:
-            VERIFY_NOT_REACHED();
-            break;
+            return;
         case Web::PendingDialog::Alert:
             alert_closed();
             break;
@@ -175,8 +183,7 @@ HeadlessWebView::HeadlessWebView(Core::AnonymousBuffer theme, Web::DevicePixelSi
     on_request_dismiss_dialog = [this]() {
         switch (m_pending_dialog) {
         case Web::PendingDialog::None:
-            VERIFY_NOT_REACHED();
-            break;
+            return;
         case Web::PendingDialog::Alert:
             alert_closed();
             break;

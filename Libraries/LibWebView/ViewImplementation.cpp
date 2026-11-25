@@ -151,6 +151,7 @@ ViewImplementation::ViewImplementation(IsPrivate is_private)
 
 ViewImplementation::~ViewImplementation()
 {
+    abandon_user_prompt();
     // NB: What waits on this view's window hears that it went.
     run_window_geometry_waiters();
     for (auto& waiter : exchange(m_os_window_waiters, {}))
@@ -3399,31 +3400,76 @@ void ViewImplementation::set_is_fullscreen(Web::ViewportIsFullscreen is_fullscre
     handle_resize();
 }
 
-// NB: Every page of the tab holds the dialog a document of one of them opened.
+static void answer_user_prompt_in_renderer(WebContentPage& page, Web::PendingDialog type, bool accepted, Optional<Utf16String> const& user_text = {})
+{
+    switch (type) {
+    case Web::PendingDialog::Alert:
+        page.async_alert_closed();
+        break;
+    case Web::PendingDialog::BeforeUnload:
+        page.async_before_unload_closed(accepted);
+        break;
+    case Web::PendingDialog::Confirm:
+        page.async_confirm_closed(accepted);
+        break;
+    case Web::PendingDialog::Prompt:
+        page.async_prompt_closed(user_text);
+        break;
+    case Web::PendingDialog::None:
+        VERIFY_NOT_REACHED();
+    }
+}
+
+void ViewImplementation::close_user_prompt(Web::PendingDialog type, bool accepted, Optional<Utf16String> const& user_text)
+{
+    if (!m_user_prompt.has_value() || m_user_prompt->type != type)
+        return;
+
+    auto prompt = m_user_prompt.release_value();
+    if (auto* bidi = WebDriverBiDi::the(); bidi && !owner_view_id().has_value()) {
+        if (auto navigable = traversable().find(prompt.navigable_id); navigable.has_value())
+            bidi->user_prompt_closed(*navigable, type, accepted, user_text);
+    }
+
+    // Only the initiating process has a call waiting for a result. The other pages are simply unblocked.
+    traversable().for_each_hosting_page([&](WebContentPage& page) {
+        if (&page != prompt.page.ptr())
+            page.async_did_open_dialog_in_another_process(Web::PendingDialog::None, Utf16View {});
+    });
+    if (prompt.page->is_open())
+        answer_user_prompt_in_renderer(*prompt.page, type, accepted, user_text);
+    if (prompt.on_handled)
+        prompt.on_handled(JsonValue { JsonObject {} });
+}
+
+void ViewImplementation::abandon_user_prompt()
+{
+    if (!m_user_prompt.has_value())
+        return;
+    auto on_handled = move(m_user_prompt->on_handled);
+    close_user_prompt(m_user_prompt->type, false);
+    if (on_handled)
+        on_handled(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::NoSuchAlert, "The user prompt went away"sv));
+}
+
 void ViewImplementation::alert_closed()
 {
-    traversable().for_each_hosting_page([&](WebContentPage& page) {
-        page.async_alert_closed();
-    });
+    close_user_prompt(Web::PendingDialog::Alert, true);
 }
 
 void ViewImplementation::before_unload_closed(bool accepted)
 {
-    page().routed_proxy()->async_before_unload_closed(page().id(), accepted);
+    close_user_prompt(Web::PendingDialog::BeforeUnload, accepted);
 }
 
 void ViewImplementation::confirm_closed(bool accepted)
 {
-    traversable().for_each_hosting_page([&](WebContentPage& page) {
-        page.async_confirm_closed(accepted);
-    });
+    close_user_prompt(Web::PendingDialog::Confirm, accepted);
 }
 
 void ViewImplementation::prompt_closed(Optional<Utf16String> const& response)
 {
-    traversable().for_each_hosting_page([&](WebContentPage& page) {
-        page.async_prompt_closed(response);
-    });
+    close_user_prompt(Web::PendingDialog::Prompt, response.has_value(), response);
 }
 
 // The UI shows one dialog of a kind at a time, so a page asking while another page's is open is told it closed.
@@ -4422,6 +4468,12 @@ void ViewImplementation::display_page_changed(RefPtr<WebContentPage> previous_pa
 
 void ViewImplementation::did_lose_page(Badge<CanonicalTraversable>, WebContentPage& page, WebContentProcessLost process_lost)
 {
+    if (m_user_prompt.has_value() && m_user_prompt->page.ptr() == &page) {
+        abandon_user_prompt();
+        if (on_request_dismiss_dialog)
+            on_request_dismiss_dialog();
+    }
+
     bool lost_active_input_host = process_lost == WebContentProcessLost::Yes && !m_webdriver_input_commands.is_empty()
         && m_webdriver_input_commands.first().command.name != "element_click"sv
         && m_pending_webdriver_commands.contains(m_webdriver_input_commands.first().command_id)
@@ -4671,9 +4723,54 @@ void ViewImplementation::did_complete_webdriver_user_prompt_handling(Badge<WebCo
         on_complete.value()(move(response));
 }
 
-void ViewImplementation::did_open_user_prompt(Badge<WebContentPage>)
+bool ViewImplementation::did_open_user_prompt(Badge<WebContentPage>, WebContentPage& page, Web::HTML::CrossProcessId navigable_id, Web::PendingDialog type, Utf16String const& message, Optional<Utf16String> const& default_value)
 {
-    complete_webdriver_navigation();
+    auto navigable = page.hosted_navigable(navigable_id);
+    if (!navigable.has_value() || !page.hosts_active_document_of(*navigable) || m_user_prompt.has_value()) {
+        answer_user_prompt_in_renderer(page, type, false);
+        return false;
+    }
+
+    m_user_prompt = UserPrompt { page, navigable_id, type, {} };
+    traversable().for_each_hosting_page([&](WebContentPage& other_page) {
+        if (&other_page != &page)
+            other_page.async_did_open_dialog_in_another_process(type, message);
+    });
+
+    if (type != Web::PendingDialog::BeforeUnload)
+        complete_webdriver_navigation();
+
+    if (auto* bidi = WebDriverBiDi::the(); bidi && bidi->session_state().is_active && !owner_view_id().has_value()) {
+        using Web::WebDriver::PromptHandler;
+        auto handler = bidi->user_prompt_opened(*navigable, type, message, default_value);
+        if (handler != PromptHandler::Ignore) {
+            auto accepted = handler == PromptHandler::Accept || type == Web::PendingDialog::Alert;
+            close_user_prompt(type, accepted, accepted ? default_value : Optional<Utf16String> {});
+            return false;
+        }
+    }
+    return true;
+}
+
+void ViewImplementation::handle_webdriver_user_prompt(Web::HTML::CrossProcessId navigable_id, bool accept, Utf16String const& user_text, Function<void(Web::WebDriver::Response)> on_complete)
+{
+    if (!m_user_prompt.has_value() || m_user_prompt->navigable_id != navigable_id || m_user_prompt->on_handled) {
+        on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::NoSuchAlert, "No user prompt is open in this browsing context"sv));
+        return;
+    }
+
+    auto type = m_user_prompt->type;
+    bool acknowledge = accept || type == Web::PendingDialog::Alert;
+    auto& answer = acknowledge ? on_request_accept_dialog : on_request_dismiss_dialog;
+    m_user_prompt->on_handled = move(on_complete);
+    if (!answer) {
+        close_user_prompt(type, acknowledge, acknowledge && type == Web::PendingDialog::Prompt ? Optional<Utf16String> { user_text } : Optional<Utf16String> {});
+        return;
+    }
+
+    if (accept && type == Web::PendingDialog::Prompt && on_request_set_prompt_text)
+        on_request_set_prompt_text(user_text);
+    answer();
 }
 
 Optional<ViewImplementation&> ViewImplementation::find_view_by_handle(StringView handle)

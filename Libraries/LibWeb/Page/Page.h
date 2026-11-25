@@ -314,16 +314,16 @@ public:
 
     void did_receive_network_activity(Fetch::Engine::Event::NetworkActivity const&);
 
-    void did_request_alert(Utf16String const& message);
+    void did_request_alert(HTML::CrossProcessId, Utf16String const& message);
     void alert_closed();
 
-    bool did_request_before_unload(String const& source, HTML::EventLoop&);
+    bool did_request_before_unload(HTML::CrossProcessId, String const& source, HTML::EventLoop&);
     void before_unload_closed(bool accepted);
 
-    bool did_request_confirm(Utf16String const& message);
+    bool did_request_confirm(HTML::CrossProcessId, Utf16String const& message);
     void confirm_closed(bool accepted);
 
-    Optional<Utf16String> did_request_prompt(Utf16String const& message, Utf16String const& default_);
+    Optional<Utf16String> did_request_prompt(HTML::CrossProcessId, Utf16String const& message, Utf16String const& default_);
     void prompt_closed(Optional<Utf16String> response);
 
     using PendingDialog = Web::PendingDialog;
@@ -639,6 +639,7 @@ private:
     GC::Ptr<GC::Function<void(DevicePixelRect, u64)>> m_window_rect_observer;
 
     PendingDialog m_pending_dialog { PendingDialog::None };
+    bool m_pending_dialog_is_remote { false };
     Optional<Utf16String> m_pending_dialog_text;
     Optional<Empty> m_pending_alert_response;
     Optional<bool> m_pending_before_unload_response;
@@ -903,10 +904,10 @@ public:
     virtual void page_did_leave_tooltip_area() { }
     virtual void page_did_change_favicon(Gfx::Bitmap const&) { }
     virtual void page_did_change_media_session_state(Optional<MediaSession::MediaSessionState> const&) { }
-    virtual void page_did_request_alert(Utf16String const&) { }
-    virtual void page_did_request_before_unload(String const&) { }
-    virtual void page_did_request_confirm(Utf16String const&) { }
-    virtual void page_did_request_prompt(Utf16String const&, Utf16String const&) { }
+    virtual void page_did_request_alert(HTML::CrossProcessId, Utf16String const&) { }
+    virtual void page_did_request_before_unload(HTML::CrossProcessId, String const&) { }
+    virtual void page_did_request_confirm(HTML::CrossProcessId, Utf16String const&) { }
+    virtual void page_did_request_prompt(HTML::CrossProcessId, Utf16String const&, Utf16String const&) { }
     virtual void page_did_request_set_prompt_text(Utf16String const&) { }
     virtual void page_did_request_accept_dialog() { }
     virtual void page_did_request_dismiss_dialog() { }

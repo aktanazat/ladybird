@@ -58,6 +58,7 @@ WEBCOMMON_API UserPromptHandler const& user_prompt_handler();
 WEBCOMMON_API void set_user_prompt_handler(UserPromptHandler);
 
 WEBCOMMON_API PromptHandlerConfiguration get_the_prompt_handler(PromptType);
+WEBCOMMON_API PromptHandlerConfiguration get_the_prompt_handler(UserPromptHandler const&, PromptType);
 WEBCOMMON_API Response deserialize_as_an_unhandled_prompt_behavior(JsonValue);
 WEBCOMMON_API bool check_user_prompt_handler_matches(JsonObject const&);
 WEBCOMMON_API void update_the_user_prompt_handler(JsonObject const&);

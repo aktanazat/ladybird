@@ -1511,9 +1511,9 @@ void PageClient::page_did_stop_geolocation_position_watch(u64 request_id)
     client().async_did_stop_geolocation_position_watch(m_id, request_id);
 }
 
-void PageClient::page_did_request_alert(Utf16String const& message)
+void PageClient::page_did_request_alert(Web::HTML::CrossProcessId navigable_id, Utf16String const& message)
 {
-    client().async_did_request_alert(m_id, message);
+    client().async_did_request_alert(m_id, navigable_id, message);
 
     if (m_webdriver)
         m_webdriver->page_did_open_dialog({});
@@ -1524,17 +1524,17 @@ void PageClient::alert_closed()
     page().alert_closed();
 }
 
-void PageClient::page_did_request_before_unload(String const& source)
+void PageClient::page_did_request_before_unload(Web::HTML::CrossProcessId navigable_id, String const& source)
 {
-    client().async_did_request_before_unload(m_id, source);
+    client().async_did_request_before_unload(m_id, navigable_id, source);
 
     if (m_webdriver)
         m_webdriver->page_did_open_dialog({});
 }
 
-void PageClient::page_did_request_confirm(Utf16String const& message)
+void PageClient::page_did_request_confirm(Web::HTML::CrossProcessId navigable_id, Utf16String const& message)
 {
-    client().async_did_request_confirm(m_id, message);
+    client().async_did_request_confirm(m_id, navigable_id, message);
 
     if (m_webdriver)
         m_webdriver->page_did_open_dialog({});
@@ -1545,9 +1545,9 @@ void PageClient::confirm_closed(bool accepted)
     page().confirm_closed(accepted);
 }
 
-void PageClient::page_did_request_prompt(Utf16String const& message, Utf16String const& default_)
+void PageClient::page_did_request_prompt(Web::HTML::CrossProcessId navigable_id, Utf16String const& message, Utf16String const& default_)
 {
-    client().async_did_request_prompt(m_id, message, default_);
+    client().async_did_request_prompt(m_id, navigable_id, message, default_);
 
     if (m_webdriver)
         m_webdriver->page_did_open_dialog({});

@@ -430,15 +430,6 @@ Optional<WebContentPage::ViewPosition> WebContentPage::view_position(Web::HTML::
     return ViewPosition { view(), position };
 }
 
-// A dialog blocks the whole tab, so every other page of the tab is told of the one a document of this page opened.
-void WebContentPage::did_open_dialog(Web::PendingDialog dialog, Utf16String const& message)
-{
-    traversable().for_each_hosting_page([&](WebContentPage& page) {
-        if (&page != this)
-            page.async_did_open_dialog_in_another_process(dialog, message);
-    });
-}
-
 void WebContentPage::maybe_record_history_visit_for_current_load(URL::URL const& url, Optional<String> title, StringView reason)
 {
     auto normalized_url = normalize_url_for_history(url);
@@ -3346,29 +3337,23 @@ void WebContentPage::did_get_debugger_source_positions(u64 request_id, Vector<De
     }
 }
 
-void WebContentPage::did_request_alert(Utf16String message)
+void WebContentPage::did_request_alert(Web::HTML::CrossProcessId navigable_id, Utf16String message)
 {
-    did_open_dialog(Web::PendingDialog::Alert, message);
-    view().did_open_user_prompt({});
+    if (!view().did_open_user_prompt({}, *this, navigable_id, Web::PendingDialog::Alert, message))
+        return;
     if (view().on_request_alert)
         view().on_request_alert(message);
+    else
+        view().alert_closed();
 }
 
-void WebContentPage::did_request_before_unload(String source)
+void WebContentPage::did_request_before_unload(Web::HTML::CrossProcessId navigable_id, String source)
 {
-    did_open_dialog(Web::PendingDialog::BeforeUnload, {});
-    auto weak_traversable = m_traversable;
-    auto origin_page_id = id();
-    auto close_prompt = [weak_traversable, origin_page_id](bool accepted) {
-        if (!weak_traversable)
-            return;
-
-        weak_traversable->for_each_hosting_page([&](WebContentPage& page) {
-            if (page.id() != origin_page_id)
-                page.async_did_open_dialog_in_another_process(Web::PendingDialog::None, Utf16View {});
-            else
-                page.routed_proxy()->async_before_unload_closed(origin_page_id, accepted);
-        });
+    if (!view().did_open_user_prompt({}, *this, navigable_id, Web::PendingDialog::BeforeUnload, {}))
+        return;
+    auto close_prompt = [weak_view = view().make_weak_ptr(), origin_page_id = id()](bool accepted) {
+        if (weak_view && weak_view->m_user_prompt.has_value() && weak_view->m_user_prompt->page->id() == origin_page_id)
+            weak_view->before_unload_closed(accepted);
     };
 
     if (view().on_request_before_unload) {
@@ -3379,20 +3364,24 @@ void WebContentPage::did_request_before_unload(String source)
     close_prompt(true);
 }
 
-void WebContentPage::did_request_confirm(Utf16String message)
+void WebContentPage::did_request_confirm(Web::HTML::CrossProcessId navigable_id, Utf16String message)
 {
-    did_open_dialog(Web::PendingDialog::Confirm, message);
-    view().did_open_user_prompt({});
+    if (!view().did_open_user_prompt({}, *this, navigable_id, Web::PendingDialog::Confirm, message))
+        return;
     if (view().on_request_confirm)
         view().on_request_confirm(message);
+    else
+        view().confirm_closed(false);
 }
 
-void WebContentPage::did_request_prompt(Utf16String message, Utf16String default_)
+void WebContentPage::did_request_prompt(Web::HTML::CrossProcessId navigable_id, Utf16String message, Utf16String default_)
 {
-    did_open_dialog(Web::PendingDialog::Prompt, message);
-    view().did_open_user_prompt({});
+    if (!view().did_open_user_prompt({}, *this, navigable_id, Web::PendingDialog::Prompt, message, default_))
+        return;
     if (view().on_request_prompt)
         view().on_request_prompt(message, default_);
+    else
+        view().prompt_closed({});
 }
 
 void WebContentPage::did_change_favicon(Gfx::ShareableBitmap favicon)

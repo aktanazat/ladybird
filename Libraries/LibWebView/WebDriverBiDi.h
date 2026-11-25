@@ -20,8 +20,10 @@
 #include <LibRequests/Forward.h>
 #include <LibURL/URL.h>
 #include <LibWebCommon/HTML/CrossProcessId.h>
+#include <LibWebCommon/Page/PendingDialog.h>
 #include <LibWebCommon/WebDriver/BiDi.h>
 #include <LibWebCommon/WebDriver/Response.h>
+#include <LibWebCommon/WebDriver/UserPrompt.h>
 #include <LibWebView/Forward.h>
 
 namespace WebView {
@@ -47,6 +49,10 @@ public:
     void get_top_level_traversables(u64 command_id, Vector<String> const& navigable_ids);
     void run_subscribe_steps(u64 command_id, String const& event_name, Vector<String> const& top_level_traversable_ids);
     void set_enabled_events(Vector<String> const& event_names, HashMap<String, Optional<Vector<String>>> event_contexts);
+
+    void set_user_prompt_handler(Web::WebDriver::UserPromptHandler handler) { m_user_prompt_handler = move(handler); }
+    Web::WebDriver::PromptHandler user_prompt_opened(CanonicalNavigable const&, Web::PendingDialog, Utf16String const& message, Optional<Utf16String> const& default_value);
+    void user_prompt_closed(CanonicalNavigable const&, Web::PendingDialog, bool accepted, Optional<Utf16String> const& user_text);
 
     bool is_event_enabled(StringView event_name) const { return m_enabled_events.contains(event_name); }
     Web::WebDriver::BiDiSessionState const& session_state() const { return m_session_state; }
@@ -149,6 +155,7 @@ private:
     void browsing_context_close(JsonObject const& params, CommandResult);
     void browsing_context_create(JsonObject const& params, CommandResult);
     void browsing_context_get_tree(JsonObject const& params, CommandResult);
+    void browsing_context_handle_user_prompt(JsonObject const& params, CommandResult);
     void browsing_context_navigate(JsonObject const& params, CommandResult);
     void browsing_context_reload(JsonObject const& params, CommandResult);
     void browsing_context_set_viewport(JsonObject const& params, CommandResult);
@@ -174,6 +181,7 @@ private:
 
     WebDriverBrowserConnection& m_connection;
 
+    Web::WebDriver::UserPromptHandler m_user_prompt_handler;
     HashTable<String> m_enabled_events;
     HashMap<String, Optional<Vector<String>>> m_enabled_event_contexts;
     Web::WebDriver::BiDiSessionState m_session_state;

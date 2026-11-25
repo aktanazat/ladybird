@@ -321,6 +321,63 @@ void WebDriverBiDi::emit_event_for_navigable(StringView name, JsonValue params, 
     emit_event(name, move(params), { navigable_id(navigable.top_level_traversable()) });
 }
 
+struct UserPromptType {
+    Web::WebDriver::PromptType policy_type;
+    StringView name;
+};
+
+static UserPromptType user_prompt_type(Web::PendingDialog type)
+{
+    using Web::WebDriver::PromptType;
+    switch (type) {
+    case Web::PendingDialog::Alert:
+        return { PromptType::Alert, "alert"sv };
+    case Web::PendingDialog::BeforeUnload:
+        return { PromptType::BeforeUnload, "beforeunload"sv };
+    case Web::PendingDialog::Confirm:
+        return { PromptType::Confirm, "confirm"sv };
+    case Web::PendingDialog::Prompt:
+        return { PromptType::Prompt, "prompt"sv };
+    case Web::PendingDialog::None:
+        VERIFY_NOT_REACHED();
+    }
+    VERIFY_NOT_REACHED();
+}
+
+// https://w3c.github.io/webdriver-bidi/#event-browsingContext-userPromptOpened
+Web::WebDriver::PromptHandler WebDriverBiDi::user_prompt_opened(CanonicalNavigable const& navigable, Web::PendingDialog type, Utf16String const& message, Optional<Utf16String> const& default_value)
+{
+    auto prompt_type = user_prompt_type(type);
+    auto handler = get_the_prompt_handler(m_user_prompt_handler, prompt_type.policy_type).handler;
+    if (is_event_enabled("browsingContext.userPromptOpened"sv)) {
+        JsonObject event;
+        event.set("context"sv, navigable_id(navigable));
+        event.set("userContext"sv, DEFAULT_USER_CONTEXT_ID);
+        event.set("type"sv, prompt_type.name);
+        event.set("message"sv, message.to_utf8());
+        event.set("handler"sv, Web::WebDriver::PromptHandlerConfiguration { handler, Web::WebDriver::PromptHandlerConfiguration::Notify::No }.serialize());
+        if (default_value.has_value())
+            event.set("defaultValue"sv, default_value->to_utf8());
+        emit_event_for_navigable("browsingContext.userPromptOpened"sv, move(event), navigable);
+    }
+    return handler;
+}
+
+// https://w3c.github.io/webdriver-bidi/#event-browsingContext-userPromptClosed
+void WebDriverBiDi::user_prompt_closed(CanonicalNavigable const& navigable, Web::PendingDialog type, bool accepted, Optional<Utf16String> const& user_text)
+{
+    if (!is_event_enabled("browsingContext.userPromptClosed"sv))
+        return;
+    JsonObject event;
+    event.set("context"sv, navigable_id(navigable));
+    event.set("userContext"sv, DEFAULT_USER_CONTEXT_ID);
+    event.set("type"sv, user_prompt_type(type).name);
+    event.set("accepted"sv, accepted);
+    if (user_text.has_value())
+        event.set("userText"sv, user_text->to_utf8());
+    emit_event_for_navigable("browsingContext.userPromptClosed"sv, move(event), navigable);
+}
+
 // https://w3c.github.io/webdriver-bidi/#get-the-navigable-info
 JsonObject WebDriverBiDi::get_the_navigable_info(CanonicalNavigable const& navigable, Optional<u64> max_depth, bool include_parent_id) const
 {
@@ -1101,9 +1158,9 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
     ensure_session_is_active();
 
     // NB: A command may complete after the connection to WebDriver, and this object with it, went away.
-    auto on_complete = [command_id](Web::WebDriver::Response response) {
-        if (auto* webdriver_bidi = WebDriverBiDi::the())
-            webdriver_bidi->complete_command(command_id, move(response));
+    auto on_complete = [weak_this = make_weak_ptr(), command_id](Web::WebDriver::Response response) {
+        if (weak_this)
+            weak_this->complete_command(command_id, move(response));
     };
 
     if (!params_value.is_object()) {
@@ -1192,6 +1249,8 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
         return browsing_context_create(params, move(on_complete));
     if (method == "browsingContext.getTree"sv)
         return browsing_context_get_tree(params, move(on_complete));
+    if (method == "browsingContext.handleUserPrompt"sv)
+        return browsing_context_handle_user_prompt(params, move(on_complete));
     if (method == "browsingContext.navigate"sv)
         return browsing_context_navigate(params, move(on_complete));
     if (method == "browsingContext.reload"sv)
@@ -1213,6 +1272,19 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
         return route_to_script_target(method, params, move(on_complete));
 
     on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnknownCommand, "Command is not supported"sv));
+}
+
+// https://w3c.github.io/webdriver-bidi/#command-browsingContext-handleUserPrompt
+void WebDriverBiDi::browsing_context_handle_user_prompt(JsonObject const& params, CommandResult on_complete)
+{
+    auto context = TRY_OR_COMPLETE(get_string(params, "context"sv));
+    auto* navigable = TRY_OR_COMPLETE(get_a_navigable(context));
+    auto accept = TRY_OR_COMPLETE(get_optional_bool(params, "accept"sv)).value_or(true);
+    auto user_text = TRY_OR_COMPLETE(get_optional_string(params, "userText"sv)).value_or({});
+    auto view = navigable->top_level_traversable().view();
+    if (!view.has_value())
+        return on_complete(no_such_frame());
+    view->handle_webdriver_user_prompt(navigable->id(), accept, Utf16String::from_utf8(user_text), move(on_complete));
 }
 
 // NB: A tab is in the OS window the UI says it shows it in. Without a UI to say (a headless browser), every top-level
