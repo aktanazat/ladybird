@@ -210,7 +210,13 @@ public:
     // the page, passes the pop-up blocker, in a window of its own if new_window.
     void expect_webdriver_open(u64 open_id, bool new_window) { m_webdriver_opens.append({ open_id, new_window }); }
     void forget_webdriver_open(u64 open_id) { m_webdriver_opens.remove_all_matching([&](auto const& open) { return open.id == open_id; }); }
-    Optional<bool> take_webdriver_open() { return m_webdriver_opens.is_empty() ? Optional<bool> {} : m_webdriver_opens.take_first().new_window; }
+    Optional<bool> take_webdriver_open(u64 open_id)
+    {
+        auto index = m_webdriver_opens.find_first_index_if([&](auto const& open) { return open.id == open_id; });
+        if (!index.has_value())
+            return {};
+        return m_webdriver_opens.take(*index).new_window;
+    }
     void did_change_display_page(Badge<CanonicalNavigable>, RefPtr<WebContentPage> previous_page);
     void did_cancel_loading(Badge<CanonicalNavigable>, bool canceled_navigation);
     void did_stop_loading(Badge<CanonicalTraversable>, bool stopped_navigation);
@@ -235,15 +241,17 @@ public:
 
     void set_window_position(Gfx::IntPoint);
     void set_window_size(Gfx::IntSize);
-    // Runs once the UI next reports where the window is or how large, as it does after moving or resizing it as a
+    // Run once the UI next reports where the window is, or how large, as it does after moving or resizing it as a
     // page asked, or after a second if it reports nothing (the window did not change).
-    void after_window_geometry_report(Function<void()>);
+    void after_window_position_report(Function<void()>);
+    void after_window_size_report(Function<void()>);
     Optional<Gfx::IntPoint> window_position() const { return m_window_position; }
     Optional<Gfx::IntSize> window_size() const { return m_window_size; }
     // The UI's OS window that shows this tab, which WebDriver BiDi names as the tab's client window.
     void set_os_window(u64 os_window_id);
-    // Runs once the UI says the tab is in another OS window, or after a second if it says nothing.
-    void after_os_window_change(Function<void()>);
+    // Runs once the UI says the tab is in another OS window, or with timed_out after a second it says nothing, or as
+    // the view goes away.
+    void after_os_window_change(Function<void(bool timed_out)>);
     Optional<u64> os_window_id() const { return m_os_window_id; }
     void set_system_visibility_state(Web::HTML::VisibilityState);
 
@@ -1163,9 +1171,10 @@ protected:
     Optional<Gfx::IntPoint> m_window_position;
     Optional<Gfx::IntSize> m_window_size;
     Optional<u64> m_os_window_id;
-    Vector<Function<void()>> m_window_geometry_waiters;
+    Vector<Function<void()>> m_window_position_waiters;
+    Vector<Function<void()>> m_window_size_waiters;
     RefPtr<Core::Timer> m_window_geometry_timer;
-    Vector<Function<void()>> m_os_window_waiters;
+    Vector<Function<void(bool timed_out)>> m_os_window_waiters;
     RefPtr<Core::Timer> m_os_window_timer;
     struct WebDriverOpen {
         u64 id { 0 };

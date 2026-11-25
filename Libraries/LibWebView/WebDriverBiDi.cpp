@@ -1233,36 +1233,83 @@ void WebDriverBiDi::ladybird_move_tab(JsonObject const& params, CommandResult on
     }
     auto background = TRY_OR_COMPLETE(get_optional_bool(params, "background"sv)).value_or(true);
 
-    if (os_window_id.has_value() && view->os_window_id() == os_window_id) {
-        JsonObject result;
-        result.set("clientWindow"sv, os_window_of(context));
-        return on_complete(JsonValue { move(result) });
-    }
-
-    // NB: The UI moves a tab it has placed in a window; one it has not placed yet moves once it has. The command
-    //     answers once the tab is in another window, and fails if a second passes with it where it was. A session
-    //     that ended meanwhile is answered nothing.
-    auto move_placed_tab = [weak_this = make_weak_ptr(), view_id = view->view_id(), context, os_window_id, background, on_complete = move(on_complete)]() mutable {
-        auto view = ViewImplementation::find_view_by_id(view_id);
-        if (!weak_this || !view.has_value())
+    // NB: Moves of one tab run one after another, each from where the one before left the tab.
+    auto view_id = view->view_id();
+    auto start = [weak_this = make_weak_ptr(), view_id, context = move(context), os_window_id, background, on_complete = move(on_complete)]() mutable {
+        if (!weak_this)
             return;
-        auto from = view->os_window_id();
-        view->after_os_window_change([weak_this, view_id, context, from, on_complete = move(on_complete)]() mutable {
+        CommandResult done = [weak_this, view_id, on_complete = move(on_complete)](Web::WebDriver::Response response) mutable {
+            on_complete(move(response));
+            if (weak_this)
+                weak_this->start_next_tab_move(view_id);
+        };
+        auto view = ViewImplementation::find_view_by_id(view_id);
+        if (!view.has_value())
+            return done(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::NoSuchFrame, "The tab closed before it moved"sv));
+        if (os_window_id.has_value() && view->os_window_id() == os_window_id) {
+            JsonObject result;
+            result.set("clientWindow"sv, weak_this->os_window_of(context));
+            return done(JsonValue { move(result) });
+        }
+
+        // NB: The UI moves a tab it has placed in a window; one it has not placed yet moves once it has.
+        auto move_placed_tab = [weak_this, view_id, context = move(context), os_window_id, background, done = move(done)](bool) mutable {
             auto view = ViewImplementation::find_view_by_id(view_id);
             if (!weak_this)
                 return;
-            if (!view.has_value() || view->os_window_id() == from)
-                return on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnknownError, "The tab did not move"sv));
-            JsonObject result;
-            result.set("clientWindow"sv, weak_this->os_window_of(context));
-            on_complete(JsonValue { move(result) });
-        });
-        view->on_move_to_window(os_window_id, background);
+            if (!view.has_value())
+                return done(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::NoSuchFrame, "The tab closed before it moved"sv));
+            answer_when_moved(weak_this, view_id, move(context), os_window_id, view->os_window_id(), move(done));
+            view->on_move_to_window(os_window_id, background);
+        };
+        if (view->os_window_id().has_value())
+            move_placed_tab(false);
+        else
+            view->after_os_window_change(move(move_placed_tab));
     };
-    if (view->os_window_id().has_value())
-        move_placed_tab();
-    else
-        view->after_os_window_change(move(move_placed_tab));
+    if (auto waiting = m_tab_moves.find(view_id); waiting != m_tab_moves.end()) {
+        waiting->value.append(move(start));
+        return;
+    }
+    m_tab_moves.set(view_id, {});
+    start();
+}
+
+void WebDriverBiDi::start_next_tab_move(u64 view_id)
+{
+    auto waiting = m_tab_moves.find(view_id);
+    if (waiting == m_tab_moves.end())
+        return;
+    if (waiting->value.is_empty()) {
+        m_tab_moves.remove(waiting);
+        return;
+    }
+    auto next = waiting->value.take_first();
+    next();
+}
+
+// Answers a ladybird:moveTab once its tab is where it was sent: in the client window named, or out of the one it was
+// in for a new one. A report that leaves it elsewhere (the user dragging it) waits on; a second with no report, or the
+// tab closing, fails it. A session that ended meanwhile is answered nothing.
+void WebDriverBiDi::answer_when_moved(WeakPtr<WebDriverBiDi> bidi, u64 view_id, String context, Optional<u64> to, Optional<u64> from, CommandResult on_complete)
+{
+    auto view = ViewImplementation::find_view_by_id(view_id);
+    if (!view.has_value())
+        return on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::NoSuchFrame, "The tab closed before it moved"sv));
+    view->after_os_window_change([bidi, view_id, context = move(context), to, from, on_complete = move(on_complete)](bool timed_out) mutable {
+        if (!bidi)
+            return;
+        auto view = ViewImplementation::find_view_by_id(view_id);
+        auto now = view.has_value() ? view->os_window_id() : Optional<u64> {};
+        if (view.has_value() && (to.has_value() ? now == to : now != from)) {
+            JsonObject result;
+            result.set("clientWindow"sv, bidi->os_window_of(context));
+            return on_complete(JsonValue { move(result) });
+        }
+        if (timed_out || !view.has_value())
+            return on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnknownError, "The tab did not move"sv));
+        answer_when_moved(bidi, view_id, move(context), to, from, move(on_complete));
+    });
 }
 
 // https://w3c.github.io/webdriver-bidi/#command-browser-getClientWindows
@@ -1618,8 +1665,10 @@ void WebDriverBiDi::browsing_context_create(JsonObject const& params, CommandRes
         reference_navigable = &traversables.first();
     }
 
+    auto open_id = s_next_open_id++;
     JsonObject create_params;
     create_params.set("type"sv, type);
+    create_params.set("openId"sv, open_id);
     auto reference_handle = navigable_id(*reference_navigable);
 
     // NB: The process names the top-level traversable it created, which is not one of those that exist now.
@@ -1629,7 +1678,6 @@ void WebDriverBiDi::browsing_context_create(JsonObject const& params, CommandRes
 
     // NB: The window this opens is WebDriver's, not a pop-up of the page, which the UI process would otherwise block;
     //     the view hosting the reference navigable lets exactly this request through, as a window if one was asked for.
-    auto open_id = s_next_open_id++;
     auto opening_view = reference_navigable->top_level_traversable().view();
     if (opening_view.has_value()) {
         opening_view->expect_webdriver_open(open_id, type == "window"sv);

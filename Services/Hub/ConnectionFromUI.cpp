@@ -643,10 +643,11 @@ Messages::HubServer::CreateViewResponse ConnectionFromUI::create_view(Hub::NewVi
 
 Messages::HubServer::ViewDescriptionResponse ConnectionFromUI::view_description(u64 view_id)
 {
-    // NB: The UI can ask about a view that the Hub has let go of already, and must not take the Hub down by that.
+    // NB: The UI can ask about a view that the Hub has let go of already (a tab it moves as it closes), and must not
+    //     take the Hub down by that, nor be taken down by the answer: an invalid URL fails to decode.
     auto* view = find_view(view_id);
     if (!view)
-        return Hub::ViewState {};
+        return Hub::ViewState { .url = URL::about_blank(), .displayed_url = URL::about_blank() };
     return { view->current_state() };
 }
 

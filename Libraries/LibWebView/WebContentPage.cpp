@@ -1653,7 +1653,7 @@ void WebContentPage::did_request_reposition_window(Gfx::IntPoint position, u64 c
         async_did_complete_window_rect_request(completion_id);
         return;
     }
-    view().after_window_geometry_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
+    view().after_window_position_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
     view().on_reposition_window(position);
 }
 
@@ -1665,7 +1665,7 @@ void WebContentPage::did_request_resize_window(Gfx::IntSize size, u64 completion
         async_did_complete_window_rect_request(completion_id);
         return;
     }
-    view().after_window_geometry_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
+    view().after_window_size_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
     view().on_resize_window(size);
 }
 
@@ -1677,7 +1677,7 @@ void WebContentPage::did_request_maximize_window(u64 completion_id)
         async_did_complete_window_rect_request(completion_id);
         return;
     }
-    view().after_window_geometry_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
+    view().after_window_size_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
     view().on_maximize_window();
 }
 
@@ -3447,8 +3447,9 @@ Messages::WebContentClient::DidRequestNewWebViewResponse WebContentPage::did_req
         // --> If currentNavigable's active window does not have transient activation and the user agent has been
         //     configured to not show popups
         // NB: The popup blocker runs in the renderer, which a compromised renderer skips, so the UI process checks the
-        //     activation of the input it delivered to the page. A window WebDriver BiDi asked this view for passes.
-        auto webdriver_open = view().take_webdriver_open();
+        //     activation of the input it delivered to the page. The window a WebDriver BiDi create asked this view for,
+        //     which the request names, passes.
+        auto webdriver_open = hints.webdriver_open_id.has_value() ? view().take_webdriver_open(*hints.webdriver_open_id) : Optional<bool> {};
         if (Application::the().blocks_pop_ups() && !has_transient_user_activation() && !webdriver_open.has_value())
             return { {}, {}, {}, {}, {}, {}, {}, Web::HTML::VisibilityState::Hidden, {} };
         hints.new_window = webdriver_open.value_or(false);

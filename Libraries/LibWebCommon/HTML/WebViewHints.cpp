@@ -36,6 +36,7 @@ ErrorOr<void> encode(Encoder& encoder, ::Web::HTML::WebViewHints const& data_hol
     TRY(encoder.encode(data_holder.screen_x));
     TRY(encoder.encode(data_holder.screen_y));
     TRY(encoder.encode(data_holder.new_window));
+    TRY(encoder.encode(data_holder.webdriver_open_id));
 
     return {};
 }
@@ -50,6 +51,7 @@ ErrorOr<::Web::HTML::WebViewHints> decode(Decoder& decoder)
     auto screen_x = TRY(decoder.decode<Optional<Web::DevicePixels>>());
     auto screen_y = TRY(decoder.decode<Optional<Web::DevicePixels>>());
     auto new_window = TRY(decoder.decode<bool>());
+    auto webdriver_open_id = TRY(decoder.decode<Optional<u64>>());
 
     return ::Web::HTML::WebViewHints {
         .popup = popup,
@@ -59,6 +61,7 @@ ErrorOr<::Web::HTML::WebViewHints> decode(Decoder& decoder)
         .screen_x = screen_x,
         .screen_y = screen_y,
         .new_window = new_window,
+        .webdriver_open_id = webdriver_open_id,
     };
 }
 

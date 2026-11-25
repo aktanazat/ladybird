@@ -54,7 +54,7 @@ void set_webdriver_bidi_session_state(Web::WebDriver::BiDiSessionState state)
 }
 
 // https://w3c.github.io/webdriver-bidi/#command-browsingContext-create
-static Web::WebDriver::Response create_a_new_top_level_traversable(Web::HTML::Navigable& navigable)
+static Web::WebDriver::Response create_a_new_top_level_traversable(PageClient& page_client, Web::HTML::Navigable& navigable, Optional<u64> open_id)
 {
     // 11. Let traversable be the result of trying to create a new top-level traversable steps with null, empty string,
     //     null, and false, and setting the associated user context for the newly created top-level traversable to user
@@ -66,11 +66,14 @@ static Web::WebDriver::Response create_a_new_top_level_traversable(Web::HTML::Na
 
     auto& active_window = *local_navigable->active_window();
     Web::HTML::TemporaryExecutionContext execution_context { active_window.document()->relevant_settings_object() };
-    // NB: A window WebDriver asks for is no pop-up of the page, which in the user's own browser still blocks them.
+    // NB: A window WebDriver asks for is no pop-up of the page, which in the user's own browser still blocks them; the
+    //     UI process lets it through by the open id the request names.
     auto& page = active_window.page();
     auto blocks_pop_ups = page.should_block_pop_ups();
     page.set_should_block_pop_ups(false);
+    page_client.set_webdriver_open_id(open_id);
     auto opened_window = active_window.window_open_steps_internal(u"about:blank"sv, u""sv, u"noopener"sv);
+    page_client.set_webdriver_open_id({});
     page.set_should_block_pop_ups(blocks_pop_ups);
     if (opened_window.is_error() || !opened_window.value().navigable)
         return Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnsupportedOperation, "Unable to create a top-level traversable"sv);
@@ -126,7 +129,7 @@ void run_webdriver_bidi_command(PageClient& page_client, u64 command_id, Web::HT
     if (method == "input.releaseActions"sv)
         return Web::WebDriver::BiDi::release_actions(*navigable, move(on_complete));
     if (method == "browsingContext.create"sv)
-        return on_complete->function()(create_a_new_top_level_traversable(*navigable));
+        return on_complete->function()(create_a_new_top_level_traversable(page_client, *navigable, params.get("openId"sv).map([](auto const& id) { return id.template get_integer<u64>(); }).value_or({})));
 
     on_complete->function()(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnknownCommand, "Command is not supported"sv));
 }

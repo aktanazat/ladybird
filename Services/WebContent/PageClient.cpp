@@ -1811,6 +1811,7 @@ PageClient::NewWebViewResult PageClient::page_did_request_new_web_view(Web::HTML
     // FIXME: For now, just create a new page in the same process anyway
     // FIXME: Proper agent-cluster separation must also cover same-process
     // COOP/noopener popups before they receive distinct main-world cells.
+    hints.webdriver_open_id = m_webdriver_open_id;
     auto response = client().send_sync_but_allow_failure<Messages::WebContentClient::DidRequestNewWebView>(m_id, activate_tab, hints, current_navigable_id, name, no_opener == Web::HTML::TokenizedFeature::NoOpener::Yes, move(current_document_base_url));
     if (!response) {
         dbgln("WebContent client disconnected during DidRequestNewWebView. Exiting peacefully.");

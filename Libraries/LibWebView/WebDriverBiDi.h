@@ -154,6 +154,8 @@ private:
     String os_window_of(String const& top_level_traversable_id) const;
     void browser_get_client_windows(CommandResult);
     void ladybird_move_tab(JsonObject const& params, CommandResult);
+    static void answer_when_moved(WeakPtr<WebDriverBiDi>, u64 view_id, String context, Optional<u64> to, Optional<u64> from, CommandResult);
+    void start_next_tab_move(u64 view_id);
     void storage_get_cookies(JsonObject const& params, CommandResult);
     void storage_set_cookie(JsonObject const& params, CommandResult);
     void storage_delete_cookies(JsonObject const& params, CommandResult);
@@ -184,6 +186,8 @@ private:
     HashMap<u64, CommandResult> m_pending_content_commands;
     // The browsingContext.create requests not yet answered, by the view that lets each one open its window.
     HashMap<u64, u64> m_pending_opens;
+    // The views with a ladybird:moveTab running, each with the moves waiting for it.
+    HashMap<u64, Vector<Function<void()>>> m_tab_moves;
 
     // https://w3c.github.io/webdriver-bidi/#wait-queue
     struct Waiter {

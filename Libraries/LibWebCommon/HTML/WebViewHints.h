@@ -31,6 +31,9 @@ struct WebViewHints {
     Optional<DevicePixels> screen_y;
     // A WebDriver BiDi browsingContext.create of type "window" wants its own OS window, not a tab.
     bool new_window = false;
+    // The WebDriver BiDi browsingContext.create this window is for, if any: the UI process lets that request, and no
+    // pop-up of the page, through the pop-up blocker.
+    Optional<u64> webdriver_open_id;
 };
 
 }

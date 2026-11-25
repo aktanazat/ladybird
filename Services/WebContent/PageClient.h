@@ -69,6 +69,8 @@ public:
     void did_handle_webdriver_mouse_event(u64 request_id);
     bool prepare_webdriver_input_command(u64, Optional<Web::HTML::CrossProcessId>, JsonValue&);
     void webdriver_command_complete(u64 command_id, Web::WebDriver::Response);
+    // The WebDriver BiDi browsingContext.create whose window the page opens now, which the request for it names.
+    void set_webdriver_open_id(Optional<u64> open_id) { m_webdriver_open_id = open_id; }
     void webdriver_bidi_event(Web::HTML::CrossProcessId navigable_id, String const& name, JsonValue params);
     void webdriver_bidi_navigation_event(Web::HTML::CrossProcessId navigable_id, StringView name, Optional<Utf16String> const& navigation_id, URL::URL const&);
     void set_webdriver_session_config(Web::WebDriver::UserPromptHandler, Web::WebDriver::PageLoadStrategy, bool strict_file_interactability, JsonValue const& timeouts);
@@ -512,6 +514,7 @@ private:
     Web::HTML::EventLoop::RenderingOpportunitySource m_granted_rendering_opportunity_source { Web::HTML::EventLoop::RenderingOpportunitySource::LocalTimer };
     Queue<PendingDOMMutation> m_pending_dom_mutations;
     Optional<Web::HTML::CrossProcessId> m_pending_root_navigable_id;
+    Optional<u64> m_webdriver_open_id;
 
     RefPtr<Core::Timer> m_accessibility_update_timer;
     // What the UI process was last sent of the accessibility tree, and the number of the last tree sent: Each change
