@@ -147,12 +147,19 @@ CURLcode configure_ssl_context(CURL*, [[maybe_unused]] void* ssl_context, [[mayb
         SSL_CTX_set_verify(context, SSL_CTX_get_verify_mode(context), verify_server_certificate_has_subject_alt_name);
     }
 
-    // Offer only modern key exchange groups, with key shares for the two X25519 based groups. Some CDNs reject
-    // requests that have a browser User-Agent and the TLS fingerprint of a default OpenSSL client. OpenSSL older than
-    // 3.5 does not understand this syntax. It rejects the list and keeps its default groups.
+    // Offer only modern key exchange groups, with key shares for the two X25519 based groups, and Chrome's cipher
+    // suites in Chrome's order. Some CDNs reject requests that have a browser User-Agent and the TLS fingerprint of a
+    // default OpenSSL client: eBay's CDN answers every request with a 403 while we offer OpenSSL's finite-field DHE
+    // suites, which no major browser sends. OpenSSL older than 3.5 does not understand the groups syntax. It rejects
+    // the list and keeps its default groups.
     if (uses_openssl) {
+        auto* context = static_cast<SSL_CTX*>(ssl_context);
         char groups[] = "*X25519MLKEM768:*X25519:P-256:P-384";
-        if (SSL_CTX_set1_groups_list(static_cast<SSL_CTX*>(ssl_context), groups) != 1)
+        if (SSL_CTX_set1_groups_list(context, groups) != 1)
+            ERR_clear_error();
+        if (SSL_CTX_set_ciphersuites(context, "TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256") != 1)
+            ERR_clear_error();
+        if (SSL_CTX_set_cipher_list(context, "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-SHA:ECDHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA:AES256-SHA") != 1)
             ERR_clear_error();
     }
 
