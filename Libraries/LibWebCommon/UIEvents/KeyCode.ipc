@@ -142,6 +142,18 @@ enum Web::UIEvents::KeyCode : u8 {
     Key_Apps = 0xA9,
     Key_PlayPause = 0xAA,
     Key_Menu = 0xAB,
+    Key_F13 = 0xC0,
+    Key_F14 = 0xC1,
+    Key_F15 = 0xC2,
+    Key_F16 = 0xC3,
+    Key_F17 = 0xC4,
+    Key_F18 = 0xC5,
+    Key_F19 = 0xC6,
+    Key_F20 = 0xC7,
+    Key_F21 = 0xC8,
+    Key_F22 = 0xC9,
+    Key_F23 = 0xCA,
+    Key_F24 = 0xCB,
 }
 
 // NB: Mod_PlatformCtrl and Mod_PlatformWordJump each name one of these, which one depends on the platform.

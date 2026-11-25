@@ -696,6 +696,18 @@ static Web::UIEvents::KeyCode get_keycode_from_qt_key_event(QKeyEvent const& eve
         { Qt::Key_F10, Web::UIEvents::Key_F10 },
         { Qt::Key_F11, Web::UIEvents::Key_F11 },
         { Qt::Key_F12, Web::UIEvents::Key_F12 },
+        { Qt::Key_F13, Web::UIEvents::Key_F13 },
+        { Qt::Key_F14, Web::UIEvents::Key_F14 },
+        { Qt::Key_F15, Web::UIEvents::Key_F15 },
+        { Qt::Key_F16, Web::UIEvents::Key_F16 },
+        { Qt::Key_F17, Web::UIEvents::Key_F17 },
+        { Qt::Key_F18, Web::UIEvents::Key_F18 },
+        { Qt::Key_F19, Web::UIEvents::Key_F19 },
+        { Qt::Key_F20, Web::UIEvents::Key_F20 },
+        { Qt::Key_F21, Web::UIEvents::Key_F21 },
+        { Qt::Key_F22, Web::UIEvents::Key_F22 },
+        { Qt::Key_F23, Web::UIEvents::Key_F23 },
+        { Qt::Key_F24, Web::UIEvents::Key_F24 },
         { Qt::Key_F2, Web::UIEvents::Key_F2 },
         { Qt::Key_F3, Web::UIEvents::Key_F3 },
         { Qt::Key_F4, Web::UIEvents::Key_F4 },
@@ -773,6 +785,31 @@ static Web::UIEvents::KeyCode get_keycode_from_qt_key_event(QKeyEvent const& eve
         if (event.key() == mapping.qt_key)
             return mapping.serenity_key;
     }
+
+#ifdef AK_OS_MACOS
+    // NB: Qt names no key for the release of F13 to F20 on macOS, whose press it names, so the release is known by its
+    //     virtual key code (kVK_F13 and on, Carbon's Events.h).
+    switch (event.nativeVirtualKey()) {
+    case 0x69:
+        return Web::UIEvents::Key_F13;
+    case 0x6B:
+        return Web::UIEvents::Key_F14;
+    case 0x71:
+        return Web::UIEvents::Key_F15;
+    case 0x6A:
+        return Web::UIEvents::Key_F16;
+    case 0x40:
+        return Web::UIEvents::Key_F17;
+    case 0x4F:
+        return Web::UIEvents::Key_F18;
+    case 0x50:
+        return Web::UIEvents::Key_F19;
+    case 0x5A:
+        return Web::UIEvents::Key_F20;
+    default:
+        break;
+    }
+#endif
     return Web::UIEvents::Key_Invalid;
 }
 

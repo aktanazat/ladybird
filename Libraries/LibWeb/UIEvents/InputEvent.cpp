@@ -31,6 +31,7 @@ GC::Ref<InputEvent> InputEvent::create(FlyString const& event_name, InputEventIn
 GC::Ref<InputEvent> InputEvent::create_from_platform_event(FlyString const& event_name, InputEventInit const& event_init, Vector<GC::Ref<DOM::StaticRange>> const& target_ranges, HighResolutionTime::DOMHighResTimeStamp time_stamp)
 {
     auto event = create(event_name, event_init, target_ranges, time_stamp);
+    event->set_is_trusted(true);
     event->set_bubbles(true);
     event->set_composed(true);
     if (event_name == EventNames::beforeinput) {
@@ -42,6 +43,7 @@ GC::Ref<InputEvent> InputEvent::create_from_platform_event(FlyString const& even
 GC::Ref<InputEvent> InputEvent::create_from_platform_event(Utf16FlyString const& event_name, InputEventInit const& event_init, Vector<GC::Ref<DOM::StaticRange>> const& target_ranges, HighResolutionTime::DOMHighResTimeStamp time_stamp)
 {
     auto event = GC::Heap::the().allocate<InputEvent>(event_name, event_init, target_ranges, time_stamp);
+    event->set_is_trusted(true);
     event->set_bubbles(true);
     event->set_composed(true);
     if (event_name == EventNames::beforeinput)

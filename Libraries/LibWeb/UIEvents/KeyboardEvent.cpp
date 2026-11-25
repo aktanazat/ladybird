@@ -134,6 +134,10 @@ static unsigned long determine_key_code(KeyCode platform_key, u32 code_point)
         break;
     }
 
+    // NB: F13 to F24 have the virtual key codes that follow F12's (124 to 135), which our KeyCode values do not.
+    if (platform_key >= KeyCode::Key_F13 && platform_key <= KeyCode::Key_F24)
+        return 124 + (platform_key - KeyCode::Key_F13);
+
     // Return the virtual key code from the operating system.
     return platform_key;
 }
@@ -255,6 +259,30 @@ static ErrorOr<Optional<Utf16FlyString>> get_event_named_key(KeyCode platform_ke
         return "F11"_utf16_fly_string;
     case KeyCode::Key_F12:
         return "F12"_utf16_fly_string;
+    case KeyCode::Key_F13:
+        return "F13"_utf16_fly_string;
+    case KeyCode::Key_F14:
+        return "F14"_utf16_fly_string;
+    case KeyCode::Key_F15:
+        return "F15"_utf16_fly_string;
+    case KeyCode::Key_F16:
+        return "F16"_utf16_fly_string;
+    case KeyCode::Key_F17:
+        return "F17"_utf16_fly_string;
+    case KeyCode::Key_F18:
+        return "F18"_utf16_fly_string;
+    case KeyCode::Key_F19:
+        return "F19"_utf16_fly_string;
+    case KeyCode::Key_F20:
+        return "F20"_utf16_fly_string;
+    case KeyCode::Key_F21:
+        return "F21"_utf16_fly_string;
+    case KeyCode::Key_F22:
+        return "F22"_utf16_fly_string;
+    case KeyCode::Key_F23:
+        return "F23"_utf16_fly_string;
+    case KeyCode::Key_F24:
+        return "F24"_utf16_fly_string;
 
     default:
         break;
@@ -606,6 +634,30 @@ static ErrorOr<Utf16FlyString> get_event_code(KeyCode platform_key, unsigned mod
         return "F11"_utf16_fly_string;
     case KeyCode::Key_F12:
         return "F12"_utf16_fly_string;
+    case KeyCode::Key_F13:
+        return "F13"_utf16_fly_string;
+    case KeyCode::Key_F14:
+        return "F14"_utf16_fly_string;
+    case KeyCode::Key_F15:
+        return "F15"_utf16_fly_string;
+    case KeyCode::Key_F16:
+        return "F16"_utf16_fly_string;
+    case KeyCode::Key_F17:
+        return "F17"_utf16_fly_string;
+    case KeyCode::Key_F18:
+        return "F18"_utf16_fly_string;
+    case KeyCode::Key_F19:
+        return "F19"_utf16_fly_string;
+    case KeyCode::Key_F20:
+        return "F20"_utf16_fly_string;
+    case KeyCode::Key_F21:
+        return "F21"_utf16_fly_string;
+    case KeyCode::Key_F22:
+        return "F22"_utf16_fly_string;
+    case KeyCode::Key_F23:
+        return "F23"_utf16_fly_string;
+    case KeyCode::Key_F24:
+        return "F24"_utf16_fly_string;
     case KeyCode::Key_PrintScreen:
     case KeyCode::Key_SysRq:
         return "PrintScreen"_utf16_fly_string;

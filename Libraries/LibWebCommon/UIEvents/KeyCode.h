@@ -150,7 +150,19 @@ namespace Web::UIEvents {
     __ENUMERATE_KEY_CODE(Calculator, "Calculator", 0xA8)             \
     __ENUMERATE_KEY_CODE(Apps, "Apps", 0xA9)                         \
     __ENUMERATE_KEY_CODE(PlayPause, "PlayPause", 0xAA)               \
-    __ENUMERATE_KEY_CODE(Menu, "Menu", 0xAB)
+    __ENUMERATE_KEY_CODE(Menu, "Menu", 0xAB)                         \
+    __ENUMERATE_KEY_CODE(F13, "F13", 0xC0)                           \
+    __ENUMERATE_KEY_CODE(F14, "F14", 0xC1)                           \
+    __ENUMERATE_KEY_CODE(F15, "F15", 0xC2)                           \
+    __ENUMERATE_KEY_CODE(F16, "F16", 0xC3)                           \
+    __ENUMERATE_KEY_CODE(F17, "F17", 0xC4)                           \
+    __ENUMERATE_KEY_CODE(F18, "F18", 0xC5)                           \
+    __ENUMERATE_KEY_CODE(F19, "F19", 0xC6)                           \
+    __ENUMERATE_KEY_CODE(F20, "F20", 0xC7)                           \
+    __ENUMERATE_KEY_CODE(F21, "F21", 0xC8)                           \
+    __ENUMERATE_KEY_CODE(F22, "F22", 0xC9)                           \
+    __ENUMERATE_KEY_CODE(F23, "F23", 0xCA)                           \
+    __ENUMERATE_KEY_CODE(F24, "F24", 0xCB)
 
 enum KeyCode : u8 {
 #define __ENUMERATE_KEY_CODE(name, ui_name, code) Key_##name = code,
