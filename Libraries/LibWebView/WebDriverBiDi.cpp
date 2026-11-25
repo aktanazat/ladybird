@@ -2332,11 +2332,11 @@ void WebDriverBiDi::route_to_navigable(String const& method, JsonObject const& p
 }
 
 // https://w3c.github.io/webdriver-bidi/#realm-id
-// NB: The id of a realm names the document whose relevant realm it is, which the process hosting it gave.
+// NB: A realm id starts with the document id. For a sandbox, the last component identifies its realm within the document.
 static Optional<Web::HTML::CrossProcessId> document_id_of_realm_id(StringView realm_id)
 {
     auto parts = realm_id.split_view('.');
-    if (parts.size() != 2)
+    if (parts.size() != 2 && parts.size() != 3)
         return {};
 
     auto namespace_id = parts[0].to_number<u64>();

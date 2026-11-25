@@ -10,6 +10,8 @@
 #include <LibJS/Runtime/ConsoleObject.h>
 #include <LibJS/Runtime/VM.h>
 #include <LibJS/Runtime/Value.h>
+#include <LibWeb/Bindings/HostDefined.h>
+#include <LibWeb/Bindings/WrapperWorld.h>
 #include <LibWeb/HTML/DedicatedWorkerGlobalScope.h>
 #include <LibWeb/HTML/ErrorEvent.h>
 #include <LibWeb/HTML/ErrorInformation.h>
@@ -86,6 +88,19 @@ void report_an_exception(JS::Object& global, JS::Value exception, Optional<Error
     // NB: Whatever comes out of an aborted script is no error of its own.
     if (vm.interrupt_requested())
         return;
+
+    // A sandbox shares the Window implementation with the page. Dispatching an ErrorEvent to
+    // that Window would hand page listeners the sandbox's exception object.
+    if (realm.host_defined()) {
+        auto& host_defined = Bindings::host_defined_of(realm);
+        if (host_defined.wrapper_world->type() == Bindings::WrapperWorld::Type::WebDriverSandbox) {
+            auto& settings = *host_defined.auxiliary_settings_object();
+            if (WebDriver::BiDi::is_active() && settings.execution_ready)
+                WebDriver::BiDi::error_reporting_steps(settings, exception);
+            report_exception_to_console(exception, realm, ErrorInPromise::No);
+            return;
+        }
+    }
 
     // 1. Let notHandled be true.
     bool not_handled = true;

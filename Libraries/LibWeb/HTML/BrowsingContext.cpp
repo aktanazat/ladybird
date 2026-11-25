@@ -5,6 +5,7 @@
  */
 
 #include <LibGC/Heap.h>
+#include <LibJS/Runtime/GlobalEnvironment.h>
 #include <LibWeb/Bindings/MainThreadVM.h>
 #include <LibWeb/Bindings/PrincipalHostDefined.h>
 #include <LibWeb/Bindings/Wrappable.h>
@@ -421,6 +422,10 @@ HTML::WindowProxy* BrowsingContext::window_proxy_for(Bindings::WrapperWorld& wra
         VERIFY(m_window_proxy);
         return window_proxy();
     }
+
+    // A sandbox's global-this proxy belongs to its document, and is never retargeted.
+    if (auto* proxy = WindowProxy::from_object(realm.global_environment().global_this_value()); proxy && proxy->associated_browsing_context().ptr() == this)
+        return proxy;
 
     auto& cache = m_window_proxies.cache_for(wrapper_world);
     if (auto proxy = cache.get(wrapper_world))

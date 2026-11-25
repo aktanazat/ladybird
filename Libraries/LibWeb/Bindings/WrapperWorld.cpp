@@ -73,7 +73,8 @@ GC::Ptr<JS::HostObject> WrapperWorld::wrapper_for(Wrappable const& wrappable, JS
 
 void WrapperWorld::set_wrapper(Wrappable& wrappable, JS::HostObject& wrapper)
 {
-    VERIFY(!is_detached());
+    // Pending script can still use a detached world. Its weak cache keeps wrapper identity
+    // while wrappers are live, but the world can no longer preserve wrappers.
     verify_cache_entry(*this, wrappable, wrapper);
 
     if (is_main_world()) {
@@ -117,7 +118,6 @@ GC::Ptr<JS::HostObject> WrapperWorld::rust_wrapper_for(RustInterfaceCell const& 
 void WrapperWorld::set_rust_wrapper(RustInterfaceCell& cell, JS::HostObject& wrapper)
 {
     VERIFY(!is_main_world());
-    VERIFY(!is_detached());
     VERIFY(wrapper.shape().realm().host_defined());
     VERIFY(&host_defined_wrapper_world(wrapper.shape().realm()) == this);
     VERIFY(JS::host_data_of(wrapper).ptr() == GC::as_cell(&cell));

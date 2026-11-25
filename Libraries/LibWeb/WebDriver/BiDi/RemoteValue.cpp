@@ -93,6 +93,8 @@ static HashMap<HTML::EnvironmentSettingsObject const*, String>& other_realm_ids(
 //     process routes commands to. A window that a new document reuses is a new realm for WebDriver BiDi.
 String realm_id(HTML::EnvironmentSettingsObject& settings)
 {
+    if (auto id = sandbox_realm_id(settings); id.has_value())
+        return id.release_value();
     if (auto* window = HTML::window_from_global_object(settings.global_object())) {
         auto id = window->associated_document().id();
         return MUST(String::formatted("{}.{}", id.namespace_id, id.local_id));
@@ -112,9 +114,9 @@ HTML::EnvironmentSettingsObject* settings_with_realm_id(HTML::Navigable& navigab
         return nullptr;
 
     auto& settings = document->relevant_settings_object();
-    if (realm_id(settings) != id)
-        return nullptr;
-    return &settings;
+    if (realm_id(settings) == id)
+        return &settings;
+    return sandbox_settings_with_realm_id(*document, id);
 }
 
 void clear_handle_object_map(HTML::EnvironmentSettingsObject& settings)

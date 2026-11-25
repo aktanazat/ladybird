@@ -6,6 +6,7 @@
 
 #include <AK/HashMap.h>
 #include <AK/JsonArray.h>
+#include <AK/Random.h>
 #include <AK/RefCounted.h>
 #include <LibGC/Function.h>
 #include <LibGC/Heap.h>
@@ -16,6 +17,10 @@
 #include <LibJS/Runtime/NativeFunction.h>
 #include <LibJS/Runtime/Promise.h>
 #include <LibJS/Runtime/VM.h>
+#include <LibWeb/Bindings/HostDefined.h>
+#include <LibWeb/Bindings/Intrinsics.h>
+#include <LibWeb/Bindings/MainThreadVM.h>
+#include <LibWeb/Bindings/WrapperWorld.h>
 #include <LibWeb/DOM/Document.h>
 #include <LibWeb/HTML/LocalNavigable.h>
 #include <LibWeb/HTML/Navigable.h>
@@ -24,6 +29,7 @@
 #include <LibWeb/HTML/Scripting/ExceptionReporter.h>
 #include <LibWeb/HTML/Scripting/TemporaryExecutionContext.h>
 #include <LibWeb/HTML/Window.h>
+#include <LibWeb/HTML/WindowProxy.h>
 #include <LibWeb/WebDriver/BiDi/BiDi.h>
 #include <LibWeb/WebDriver/BiDi/BindingsGlue.h>
 #include <LibWeb/WebDriver/BiDi/RemoteValue.h>
@@ -46,6 +52,184 @@ static Error no_such_frame()
     return Error::from_code(ErrorCode::NoSuchFrame, "Realm not found"sv);
 }
 
+static String document_realm_id(DOM::Document const& document)
+{
+    auto id = document.id();
+    return MUST(String::formatted("{}.{}", id.namespace_id, id.local_id));
+}
+
+class SandboxSettings final : public HTML::EnvironmentSettingsObject {
+    GC_CELL(SandboxSettings, HTML::EnvironmentSettingsObject);
+    GC_DECLARE_ALLOCATOR(SandboxSettings);
+
+public:
+    SandboxSettings(DOM::Document& document, NonnullOwnPtr<JS::ExecutionContext> execution_context, String name)
+        : EnvironmentSettingsObject(move(execution_context))
+        , name(move(name))
+        , realm_id(MUST(String::formatted("{}.{}", document_realm_id(document), generate_random_uuid())))
+        , m_document(document)
+    {
+        auto& principal = document.relevant_settings_object();
+        id = HTML::EnvironmentId::generate();
+        creation_url = principal.creation_url;
+        top_level_creation_url = principal.top_level_creation_url;
+        top_level_origin = principal.top_level_origin;
+        execution_ready = true;
+    }
+
+    virtual GC::Ptr<DOM::Document> responsible_document() override { return m_document.ptr(); }
+    virtual URL::URL api_base_url() const override { return m_document->base_url(); }
+    virtual URL::Origin origin() const override { return m_document->origin(); }
+    virtual bool has_cross_site_ancestor() const override { return principal_settings().has_cross_site_ancestor(); }
+    virtual NonnullRefPtr<HTML::PolicyContainer> policy_container() const override { return m_document->policy_container(); }
+    virtual HTML::CanUseCrossOriginIsolatedAPIs cross_origin_isolated_capability() const override { return principal_settings().cross_origin_isolated_capability(); }
+    virtual Optional<u64> agent_cluster_id() const override { return principal_settings().agent_cluster_id(); }
+    virtual HTML::CrossOriginIsolationMode agent_cluster_cross_origin_isolation_mode() const override { return principal_settings().agent_cluster_cross_origin_isolation_mode(); }
+    virtual double time_origin() const override { return principal_settings().time_origin(); }
+
+    String const name;
+    String const realm_id;
+
+private:
+    HTML::EnvironmentSettingsObject const& principal_settings() const { return m_document->relevant_settings_object(); }
+
+    virtual void visit_edges(Cell::Visitor& visitor) override
+    {
+        Base::visit_edges(visitor);
+        visitor.visit(m_document);
+    }
+
+    GC::Ref<DOM::Document> m_document;
+};
+
+GC_DEFINE_ALLOCATOR(SandboxSettings);
+
+class SandboxHostDefined final : public Bindings::HostDefined {
+    GC_CELL(SandboxHostDefined, Bindings::HostDefined);
+    GC_DECLARE_ALLOCATOR(SandboxHostDefined);
+
+public:
+    SandboxHostDefined(Bindings::Intrinsics& intrinsics, Bindings::WrapperWorld& wrapper_world, JS::Realm& principal_realm, SandboxSettings& settings)
+        : HostDefined(intrinsics, wrapper_world, principal_realm)
+        , m_settings(settings)
+    {
+    }
+
+    virtual HTML::EnvironmentSettingsObject* auxiliary_settings_object() const override { return m_settings.ptr(); }
+
+private:
+    virtual void visit_edges(Cell::Visitor& visitor) override
+    {
+        Base::visit_edges(visitor);
+        visitor.visit(m_settings);
+    }
+
+    GC::Ref<SandboxSettings> m_settings;
+};
+
+GC_DEFINE_ALLOCATOR(SandboxHostDefined);
+
+static SandboxSettings* sandbox_settings(JS::Realm& realm)
+{
+    auto& host_defined = Bindings::host_defined_of(realm);
+    if (host_defined.wrapper_world->type() != Bindings::WrapperWorld::Type::WebDriverSandbox)
+        return nullptr;
+    return static_cast<SandboxSettings*>(host_defined.auxiliary_settings_object());
+}
+
+Optional<String> sandbox_realm_id(HTML::EnvironmentSettingsObject& settings)
+{
+    if (auto* sandbox = sandbox_settings(settings.realm()))
+        return sandbox->realm_id;
+    return {};
+}
+
+using SandboxRealms = Vector<GC::Root<SandboxSettings>>;
+static HashMap<String, SandboxRealms>& sandbox_realms()
+{
+    static auto& realms = *new HashMap<String, SandboxRealms>;
+    return realms;
+}
+
+static void for_each_sandbox_realm(DOM::Document& document, auto callback)
+{
+    auto realms = sandbox_realms().find(document_realm_id(document));
+    if (realms == sandbox_realms().end())
+        return;
+    for (auto const& sandbox : realms->value)
+        callback(*sandbox);
+}
+
+HTML::EnvironmentSettingsObject* sandbox_settings_with_realm_id(DOM::Document& document, StringView id)
+{
+    SandboxSettings* found = nullptr;
+    for_each_sandbox_realm(document, [&](auto& sandbox) {
+        if (sandbox.realm_id == id)
+            found = &sandbox;
+    });
+    return found;
+}
+
+static void retire_sandbox(SandboxSettings& sandbox)
+{
+    sandbox.execution_ready = false;
+    Bindings::host_defined_wrapper_world(sandbox.realm()).detach();
+}
+
+void unload_sandbox_realms(DOM::Document& document, Function<void(HTML::EnvironmentSettingsObject&)> const& on_destroyed)
+{
+    if (auto realms = sandbox_realms().take(document_realm_id(document)); realms.has_value()) {
+        for (auto const& sandbox : *realms) {
+            retire_sandbox(*sandbox);
+            on_destroyed(*sandbox);
+        }
+    }
+}
+
+void clear_all_sandbox_realms()
+{
+    for (auto& entry : sandbox_realms()) {
+        for (auto const& sandbox : entry.value)
+            retire_sandbox(*sandbox);
+    }
+    sandbox_realms().clear();
+}
+
+// https://w3c.github.io/webdriver-bidi/#get-or-create-a-sandbox-realm
+static SandboxSettings& get_or_create_sandbox_realm(DOM::Document& document, String const& name)
+{
+    auto& principal = document.relevant_settings_object();
+    auto document_id = document_realm_id(document);
+    auto& realms = sandbox_realms().ensure(document_id);
+    for (auto const& sandbox : realms) {
+        if (sandbox->name == name)
+            return *sandbox;
+    }
+
+    auto& window = *document.window();
+    GC::Ptr<HTML::WindowProxy> proxy;
+    auto execution_context = Bindings::create_a_new_javascript_realm(
+        principal.realm().vm(), principal.agent_cluster_cross_origin_isolation_mode(),
+        [&](JS::Realm& realm) -> GC::Ref<JS::Object> { return Bindings::create_global_object_wrapper(realm, GC::Ref { window }); },
+        [&](JS::Realm& realm) -> GC::Ref<JS::Object> {
+            proxy = HTML::WindowProxy::create(realm);
+            return proxy->object();
+        });
+
+    auto& realm = *execution_context->realm();
+    auto wrapper_world = realm.heap().allocate<Bindings::WrapperWorld>(Bindings::WrapperWorld::Type::WebDriverSandbox);
+    auto intrinsics = realm.create<Bindings::Intrinsics>(realm);
+    auto sandbox = realm.create<SandboxSettings>(document, move(execution_context), name);
+    realm.set_host_defined(realm.heap().allocate<SandboxHostDefined>(*intrinsics, *wrapper_world, principal.realm(), *sandbox));
+    Bindings::cache_global_object_wrapper(realm);
+    proxy->set_window(window);
+    MUST(Bindings::initialize_window_web_interfaces(window, realm));
+
+    realms.append(GC::make_root(sandbox));
+    emit_realm_created(*sandbox);
+    return *sandbox;
+}
+
 // https://w3c.github.io/webdriver-bidi/#get-the-realm-info
 Optional<JsonObject> get_the_realm_info(HTML::EnvironmentSettingsObject& environment_settings)
 {
@@ -62,12 +246,12 @@ Optional<JsonObject> get_the_realm_info(HTML::EnvironmentSettingsObject& environ
 
     // 5. Run the steps under the first matching condition:
     // -> global object is a Window object
-    if (auto* window = HTML::window_from_global_object(global_object)) {
+    if (HTML::window_from_global_object(global_object)) {
         // 1. Let document be environment settings' relevant global object's associated Document.
-        auto& document = window->associated_document();
+        auto document = environment_settings.responsible_document();
 
         // 2. Let navigable be document's node navigable.
-        auto navigable = document.navigable();
+        auto navigable = document ? document->navigable() : nullptr;
 
         // 3. If navigable is null, return null.
         if (!navigable)
@@ -84,10 +268,11 @@ Optional<JsonObject> get_the_realm_info(HTML::EnvironmentSettingsObject& environ
         realm_info.set("type"sv, "window"sv);
         realm_info.set("context"sv, navigable_id(*navigable));
         realm_info.set("userContext"sv, DEFAULT_USER_CONTEXT_ID);
+        if (auto* sandbox = sandbox_settings(environment_settings.realm()))
+            realm_info.set("sandbox"sv, sandbox->name);
         return realm_info;
     }
 
-    // FIXME: -> global object is SandboxWindowProxy object
     // FIXME: -> global object is a WorkerGlobalScope or WorkletGlobalScope object
 
     // -> Otherwise:
@@ -111,8 +296,10 @@ JsonObject get_the_source(HTML::EnvironmentSettingsObject& environment_settings)
     //     4. Let user context id be the user context id of navigable's associated user context.
     //    Otherwise let navigable be null.
     GC::Ptr<HTML::Navigable> navigable;
-    if (auto* window = HTML::window_from_global_object(environment_settings.global_object()))
-        navigable = window->associated_document().navigable();
+    if (HTML::window_from_global_object(environment_settings.global_object())) {
+        if (auto document = environment_settings.responsible_document())
+            navigable = document->navigable();
+    }
 
     // 4. Let source be a map matching the script.Source production with the realm field set to realm, the context field
     //    set to navigable id if navigable is not null, or unset otherwise, and the userContext field set to user context
@@ -139,11 +326,12 @@ JS::Value create_a_channel(HTML::EnvironmentSettingsObject& settings, JsonObject
         auto message = vm.argument(0);
 
         // 1. Let current realm be the current Realm Record.
-        auto& current_settings = HTML::current_settings_object();
+        auto* sandbox = sandbox_settings(*vm.current_realm());
+        auto& current_settings = sandbox ? *sandbox : HTML::current_settings_object();
 
         // 2. Emit a script message with session, current realm, channel properties and message.
         // https://w3c.github.io/webdriver-bidi/#emit-a-script-message
-        if (!is_active() || !is_event_enabled("script.message"sv))
+        if (!is_active() || (sandbox && !sandbox->execution_ready) || !is_event_enabled("script.message"sv))
             return JS::js_undefined();
 
         // 1. Let environment settings be the environment settings object whose realm execution context's Realm
@@ -151,8 +339,8 @@ JS::Value create_a_channel(HTML::EnvironmentSettingsObject& settings, JsonObject
         auto& environment_settings = current_settings;
 
         // 2. Let related navigables be the result of get related navigables given environment settings.
-        auto* window = HTML::window_from_global_object(environment_settings.global_object());
-        auto navigable = window ? window->associated_document().navigable() : nullptr;
+        auto document = environment_settings.responsible_document();
+        auto navigable = document ? document->navigable() : nullptr;
         if (!navigable)
             return JS::js_undefined();
 
@@ -238,8 +426,7 @@ static ErrorOr<HTML::EnvironmentSettingsObject*, Error> get_a_realm_from_a_targe
         }
 
         // 3. Otherwise: let realm be result of trying to get or create a sandbox realm given sandbox and navigable.
-        // FIXME: Implement sandbox realms.
-        return Error::from_code(ErrorCode::UnsupportedOperation, "Sandbox realms are not supported"sv);
+        return &get_or_create_sandbox_realm(*local_navigable->active_document(), *sandbox);
     }
 
     // 2. Otherwise:
@@ -717,6 +904,7 @@ Response get_realms(HTML::Navigable& navigable, JsonObject const& params)
             auto& settings = document->relevant_settings_object();
             if (settings.execution_ready)
                 environment_settings.append(&settings);
+            for_each_sandbox_realm(*document, [&](auto& sandbox) { environment_settings.append(&sandbox); });
         }
     }
 
@@ -772,6 +960,8 @@ void run_webdriver_bidi_preload_scripts(HTML::EnvironmentSettingsObject& environ
     // 5. For each session in active BiDi sessions:
     //     1. For each preload script in session's preload script map's values:
     for (auto const& preload_script : preload_scripts) {
+        if (!is_active() || navigable->active_document().ptr() != &document)
+            return;
         // 1. If preload script's user contexts's size is not zero:
         //     1. If preload script's user contexts does not contain user context id, continue.
         if (!preload_script.user_contexts.is_empty() && !preload_script.user_contexts.contains_slow(user_context_id))
@@ -790,15 +980,15 @@ void run_webdriver_bidi_preload_scripts(HTML::EnvironmentSettingsObject& environ
         // 3. If preload script's sandbox is not null, let realm be get or create a sandbox realm with preload script's
         //    sandbox and navigable. Otherwise let realm be environment settings' realm execution context's Realm
         //    component.
-        // FIXME: Implement sandbox realms.
-        if (preload_script.sandbox.has_value())
-            continue;
+        auto& settings = preload_script.sandbox.has_value()
+            ? static_cast<HTML::EnvironmentSettingsObject&>(get_or_create_sandbox_realm(document, *preload_script.sandbox))
+            : environment_settings;
 
         // 4. Let exception reporting global be be environment settings' realm execution context's Realm component's
         //    global object.
-        auto& exception_reporting_global = environment_settings.global_object();
+        auto& exception_reporting_global = settings.global_object();
 
-        HTML::TemporaryExecutionContext execution_context { environment_settings };
+        HTML::TemporaryExecutionContext execution_context { settings };
 
         // 5. Let arguments be preload script's arguments.
         // 6. Let deserialized arguments be an empty list.
@@ -810,18 +1000,18 @@ void run_webdriver_bidi_preload_scripts(HTML::EnvironmentSettingsObject& environ
                 // 1. Let channel be create a channel with session, realm and argument.
                 // 2. Append channel to deserialized arguments.
                 if (argument.is_object())
-                    deserialized_arguments.append(create_a_channel(environment_settings, argument.as_object()));
+                    deserialized_arguments.append(create_a_channel(settings, argument.as_object()));
             }
         }
 
         // 8. Let base URL be the API base URL of environment settings.
-        auto base_url = environment_settings.api_base_url();
+        auto base_url = settings.api_base_url();
 
         // 9. Let options be the default script fetch options.
         // 10. Let function declaration be preload script's function declaration.
         // 11. Let function body evaluation status be the result of evaluate function body with function declaration,
         //     environment settings, base URL, and options.
-        auto function_body_evaluation_status = evaluate_function_body(preload_script.function_declaration, environment_settings, base_url);
+        auto function_body_evaluation_status = evaluate_function_body(preload_script.function_declaration, settings, base_url);
 
         // 12. If function body evaluation status is an abrupt completion, then report an exception given by function
         //     body evaluation status.[[Value]] for exception reporting global.
@@ -836,7 +1026,7 @@ void run_webdriver_bidi_preload_scripts(HTML::EnvironmentSettingsObject& environ
         // 14. If IsCallable(function object) is false:
         if (!function_object.is_function()) {
             // 1. Let error be a new TypeError object in realm.
-            auto error = BindingsGlue::create_preload_type_error(environment_settings);
+            auto error = BindingsGlue::create_preload_type_error(settings);
 
             // 2. Report an exception error for exception reporting global.
             HTML::report_an_exception(exception_reporting_global, error);
@@ -844,13 +1034,13 @@ void run_webdriver_bidi_preload_scripts(HTML::EnvironmentSettingsObject& environ
         }
 
         // 15. Prepare to run script with environment settings.
-        HTML::prepare_to_run_script(environment_settings);
+        HTML::prepare_to_run_script(settings);
 
         // 16. Set evaluation status to Call(function object, null, deserialized arguments).
-        auto evaluation_status = JS::call(environment_settings.global_object().vm(), function_object, JS::js_null(), deserialized_arguments.span());
+        auto evaluation_status = JS::call(settings.global_object().vm(), function_object, JS::js_null(), deserialized_arguments.span());
 
         // 17. Clean up after running script with environment settings.
-        HTML::clean_up_after_running_script(environment_settings);
+        HTML::clean_up_after_running_script(settings);
 
         // 18. If evaluation status is an abrupt completion, then report an exception given by evaluation
         //     status.[[Value]] for exception reporting global.

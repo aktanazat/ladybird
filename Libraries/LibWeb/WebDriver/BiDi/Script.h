@@ -34,6 +34,11 @@ WEB_API Response disown(HTML::Navigable&, JsonObject const& params);
 // NB: The realms of the given navigable's active document, which the browser process gathers for each navigable.
 WEB_API Response get_realms(HTML::Navigable&, JsonObject const& params);
 
+Optional<String> sandbox_realm_id(HTML::EnvironmentSettingsObject&);
+HTML::EnvironmentSettingsObject* sandbox_settings_with_realm_id(DOM::Document&, StringView);
+void unload_sandbox_realms(DOM::Document&, Function<void(HTML::EnvironmentSettingsObject&)> const& on_destroyed);
+void clear_all_sandbox_realms();
+
 // https://w3c.github.io/webdriver-bidi/#get-the-realm-info
 Optional<JsonObject> get_the_realm_info(HTML::EnvironmentSettingsObject&);
 

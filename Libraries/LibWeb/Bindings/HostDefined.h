@@ -31,6 +31,7 @@ public:
     bool fast_is() const = delete;
 
     virtual bool is_principal_host_defined() const { return false; }
+    virtual HTML::EnvironmentSettingsObject* auxiliary_settings_object() const { return nullptr; }
 
     GC::Ref<Intrinsics> intrinsics;
     GC::Ref<WrapperWorld> wrapper_world;

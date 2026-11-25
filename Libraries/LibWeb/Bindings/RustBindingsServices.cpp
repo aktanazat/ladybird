@@ -473,9 +473,7 @@ JSObject* web_bindings_window_proxy_object_in_realm(JSObject* object, void* real
 {
     auto& js_realm = *static_cast<JS::Realm*>(realm);
     auto& window_proxy = *HTML::WindowProxy::from_object(*JS::HostABI::object_from_abi(object));
-    if (auto browsing_context = window_proxy.associated_browsing_context())
-        return JS::HostABI::object_to_abi(&browsing_context->window_proxy_for(host_defined_wrapper_world(js_realm), js_realm)->object());
-    return object;
+    return JS::HostABI::object_to_abi(&window_proxy.object_for_realm(js_realm));
 }
 
 JSObject* web_bindings_create_dom_exception(void* realm, ReadonlyBytes name, FlatPtr message)

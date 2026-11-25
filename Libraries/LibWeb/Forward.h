@@ -126,6 +126,7 @@ enum class WrapperWorldType : u8 {
     Main,
     Internal,
     Extension,
+    WebDriverSandbox,
 };
 
 enum class AudioContextLatencyCategory : u8;

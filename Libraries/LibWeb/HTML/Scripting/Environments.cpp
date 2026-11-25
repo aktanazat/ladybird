@@ -660,7 +660,10 @@ JS::Realm& entry_realm()
     auto entry_execution_context = vm.last_execution_context_matching([](JS::ExecutionContext* context) {
         if (!context->realm())
             return false;
-        return &principal_realm_settings_object(*context->realm()).realm_execution_context() == context;
+        auto& realm = *context->realm();
+        if (auto* settings = Bindings::host_defined_of(realm).auxiliary_settings_object())
+            return &settings->realm_execution_context() == context;
+        return &principal_realm_settings_object(realm).realm_execution_context() == context;
     });
 
     VERIFY(entry_execution_context.has_value());

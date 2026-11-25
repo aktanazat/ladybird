@@ -15,6 +15,7 @@
 #include <LibWeb/Bindings/Wrappable.h>
 #include <LibWeb/Bindings/WrapperWorld.h>
 #include <LibWeb/DOM/Document.h>
+#include <LibWeb/HTML/BrowsingContext.h>
 #include <LibWeb/HTML/CrossOrigin/AbstractOperations.h>
 #include <LibWeb/HTML/CrossOrigin/Reporting.h>
 #include <LibWeb/HTML/LocalNavigable.h>
@@ -115,12 +116,21 @@ JS::Realm& WindowProxy::realm() const
     return m_object->shape().realm();
 }
 
-static JS::Value active_window_proxy_value(Navigable& navigable)
+JS::HostObject& WindowProxy::object_for_realm(JS::Realm& target_realm) const
+{
+    if (&target_realm == &realm())
+        return object();
+    if (auto browsing_context = associated_browsing_context())
+        return browsing_context->window_proxy_for(Bindings::host_defined_wrapper_world(target_realm), target_realm)->object();
+    return object();
+}
+
+static JS::Value active_window_proxy_value(Navigable& navigable, JS::Realm& realm)
 {
     auto window_proxy = navigable.active_window_proxy();
     if (!window_proxy)
         return JS::js_null();
-    return &window_proxy->object();
+    return &window_proxy->object_for_realm(realm);
 }
 
 // 7.2.3.1 [[GetPrototypeOf]] ( ), https://html.spec.whatwg.org/multipage/nav-history-apis.html#windowproxy-getprototypeof
@@ -181,7 +191,7 @@ JS::ThrowCompletionOr<Optional<JS::PropertyDescriptor>> WindowProxy::internal_ge
             // NOTE: children are coming sorted in required order from document_tree_child_navigables()
 
             // 2. Set value to children[index]'s active WindowProxy.
-            value = active_window_proxy_value(*children[index]);
+            value = active_window_proxy_value(*children[index], *vm.current_realm());
         }
 
         // 5. If value is undefined, then:
@@ -218,7 +228,7 @@ JS::ThrowCompletionOr<Optional<JS::PropertyDescriptor>> WindowProxy::internal_ge
             return TRY(cross_origin_property_fallback(vm, property_key));
 
         // 1. Let value be the active WindowProxy of the named object of W with the name P.
-        auto value = active_window_proxy_value(*navigable.value());
+        auto value = active_window_proxy_value(*navigable.value(), *vm.current_realm());
 
         // 2. Return PropertyDescriptor { [[Value]]: value, [[Enumerable]]: false, [[Writable]]: false, [[Configurable]]: true }.
         // NOTE: The reason the property descriptors are non-enumerable, despite this mismatching the same-origin behavior, is for compatibility with existing web content. See issue #3183 for details.

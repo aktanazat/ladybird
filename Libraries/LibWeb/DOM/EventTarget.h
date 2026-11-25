@@ -91,6 +91,8 @@ protected:
     virtual size_t external_memory_size() const override;
 
 private:
+    using EventHandlerMap = HashMap<Utf16FlyString, GC::Ref<HTML::EventHandler>>;
+
     struct Data {
         AK_ALLOC_WITH_KMALLOC;
 
@@ -98,16 +100,17 @@ private:
 
         // https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-map
         // Spec Note: The order of the entries of event handler map could be arbitrary. It is not observable through any algorithms that operate on the map.
-        HashMap<Utf16FlyString, GC::Ref<HTML::EventHandler>> event_handler_map;
+        EventHandlerMap event_handler_map;
+        HashMap<GC::Ptr<JS::Realm>, EventHandlerMap> sandbox_event_handler_maps;
     };
 
     Data& ensure_data();
     OwnPtr<Data> m_data;
 
-    WebIDL::CallbackType* get_current_value_of_event_handler(Utf16FlyString const& name);
-    void activate_event_handler(Utf16FlyString const& name, HTML::EventHandler& event_handler);
-    void deactivate_event_handler(Utf16FlyString const& name);
-    JS::ThrowCompletionOr<void> process_event_handler_for_event(Utf16FlyString const& name, Event& event);
+    WebIDL::CallbackType* get_current_value_of_event_handler(Utf16FlyString const& name, JS::Realm* sandbox_realm);
+    void activate_event_handler(Utf16FlyString const& name, HTML::EventHandler& event_handler, JS::Realm* sandbox_realm = nullptr);
+    void deactivate_event_handler(Utf16FlyString const& name, JS::Realm* sandbox_realm = nullptr);
+    JS::ThrowCompletionOr<void> process_event_handler_for_event(Utf16FlyString const& name, Event& event, JS::Realm* sandbox_realm);
 };
 
 bool is_window_reflecting_body_element_event_handler(Utf16FlyString const& name);

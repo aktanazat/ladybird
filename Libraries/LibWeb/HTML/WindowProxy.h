@@ -51,6 +51,7 @@ public:
     virtual ~WindowProxy() override = default;
 
     JS::HostObject& object() const { return *m_object; }
+    JS::HostObject& object_for_realm(JS::Realm&) const;
     JS::Realm& realm() const;
 
     GC::Ptr<Window> window() const { return m_window; }

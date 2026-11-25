@@ -233,6 +233,10 @@ void EventTarget::visit_edges(Cell::Visitor& visitor)
     if (auto const* data = m_data.ptr()) {
         visitor.visit(data->event_listener_list);
         visitor.visit(data->event_handler_map);
+        for (auto const& entry : data->sandbox_event_handler_maps) {
+            visitor.visit(entry.key);
+            visitor.visit(entry.value);
+        }
     }
 }
 
@@ -244,6 +248,9 @@ size_t EventTarget::external_memory_size() const
 
     size = JS::saturating_add_external_memory_size(size, JS::vector_external_memory_size(m_data->event_listener_list));
     size = JS::saturating_add_external_memory_size(size, JS::hash_map_external_memory_size(m_data->event_handler_map));
+    size = JS::saturating_add_external_memory_size(size, JS::hash_map_external_memory_size(m_data->sandbox_event_handler_maps));
+    for (auto const& entry : m_data->sandbox_event_handler_maps)
+        size = JS::saturating_add_external_memory_size(size, JS::hash_map_external_memory_size(entry.value));
     return size;
 }
 
@@ -654,6 +661,14 @@ static Optional<Utf16FlyString> event_name_from_event_handler_attribute_local_na
     return {};
 }
 
+static JS::Realm* current_sandbox_realm()
+{
+    auto* realm = JS::VM::the().current_realm();
+    if (realm && realm->host_defined() && Bindings::host_defined_wrapper_world(*realm).type() == Bindings::WrapperWorld::Type::WebDriverSandbox)
+        return realm;
+    return nullptr;
+}
+
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-attributes:event-handler-idl-attributes-2
 WebIDL::CallbackType* EventTarget::event_handler_attribute(Utf16FlyString const& name)
 {
@@ -665,12 +680,25 @@ WebIDL::CallbackType* EventTarget::event_handler_attribute(Utf16FlyString const&
         return nullptr;
 
     // 3. Return the result of getting the current value of the event handler given eventTarget and name.
-    return target->get_current_value_of_event_handler(name);
+    return target->get_current_value_of_event_handler(name, current_sandbox_realm());
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#getting-the-current-value-of-the-event-handler
-WebIDL::CallbackType* EventTarget::get_current_value_of_event_handler(Utf16FlyString const& name)
+WebIDL::CallbackType* EventTarget::get_current_value_of_event_handler(Utf16FlyString const& name, JS::Realm* sandbox_realm)
 {
+    // Inline handlers and the page's IDL handler slots belong to the principal world.
+    if (sandbox_realm) {
+        if (!m_data)
+            return nullptr;
+        auto world = m_data->sandbox_event_handler_maps.find(GC::Ptr { sandbox_realm });
+        if (world == m_data->sandbox_event_handler_maps.end())
+            return nullptr;
+        auto handler = world->value.find(name);
+        if (handler == world->value.end())
+            return nullptr;
+        return handler->value->value.get<GC::Ptr<WebIDL::CallbackType>>().ptr();
+    }
+
     // 1. Let handlerMap be eventTarget's event handler map. (NOTE: Not necessary)
     auto& handler_map = ensure_data().event_handler_map;
 
@@ -809,6 +837,7 @@ WebIDL::CallbackType* EventTarget::get_current_value_of_event_handler(Utf16FlySt
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-handler-attributes:event-handler-idl-attributes-3
 void EventTarget::set_event_handler_attribute(Utf16FlyString const& name, GC::Ptr<WebIDL::CallbackType> value)
 {
+    auto* sandbox_realm = current_sandbox_realm();
     // 1. Let eventTarget be the result of determining the target of an event handler given this object and name.
     auto event_target = determine_target_of_event_handler(*this, name);
 
@@ -818,13 +847,14 @@ void EventTarget::set_event_handler_attribute(Utf16FlyString const& name, GC::Pt
 
     // 3. If the given value is null, then deactivate an event handler given eventTarget and name.
     if (!value) {
-        event_target->deactivate_event_handler(name);
+        event_target->deactivate_event_handler(name, sandbox_realm);
         return;
     }
 
     // 4. Otherwise:
     //  1. Let handlerMap be eventTarget's event handler map.
-    auto& handler_map = event_target->ensure_data().event_handler_map;
+    auto& data = event_target->ensure_data();
+    auto& handler_map = sandbox_realm ? data.sandbox_event_handler_maps.ensure(GC::Ptr { sandbox_realm }) : data.event_handler_map;
 
     //  2. Let eventHandler be handlerMap[name].
     auto event_handler_iterator = handler_map.find(name);
@@ -838,7 +868,7 @@ void EventTarget::set_event_handler_attribute(Utf16FlyString const& name, GC::Pt
         // Optimization: We pass in the event handler here instead of having activate_event_handler do another hash map lookup just to get the same object.
         //               This handles a new event handler while the other path handles an existing event handler. As such, both paths must have their own
         //               unique call to activate_event_handler.
-        event_target->activate_event_handler(name, *new_event_handler);
+        event_target->activate_event_handler(name, *new_event_handler, sandbox_realm);
 
         handler_map.set(name, new_event_handler);
         return;
@@ -850,7 +880,7 @@ void EventTarget::set_event_handler_attribute(Utf16FlyString const& name, GC::Pt
 
     //  4. Activate an event handler given eventTarget and name.
     //  NOTE: See the optimization comment above.
-    event_target->activate_event_handler(name, *event_handler);
+    event_target->activate_event_handler(name, *event_handler, sandbox_realm);
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#activate-an-event-handler
@@ -870,7 +900,7 @@ static JS::Realm& event_handler_listener_realm(EventTarget& event_target, HTML::
     VERIFY_NOT_REACHED();
 }
 
-void EventTarget::activate_event_handler(Utf16FlyString const& name, HTML::EventHandler& event_handler)
+void EventTarget::activate_event_handler(Utf16FlyString const& name, HTML::EventHandler& event_handler, JS::Realm* sandbox_realm)
 {
     // 1. Let handlerMap be eventTarget's event handler map.
     // 2. Let eventHandler be handlerMap[name].
@@ -880,15 +910,14 @@ void EventTarget::activate_event_handler(Utf16FlyString const& name, HTML::Event
     if (event_handler.listener)
         return;
 
-    JS::Realm& realm = event_handler_listener_realm(*this, event_handler);
+    JS::Realm& realm = sandbox_realm ? *sandbox_realm : event_handler_listener_realm(*this, event_handler);
 
     // 4. Let callback be the result of creating a Web IDL EventListener instance representing a reference to a function of one argument that executes the steps of the event handler processing algorithm, given eventTarget, name, and its argument.
     //    The EventListener's callback context can be arbitrary; it does not impact the steps of the event handler processing algorithm. [DOM]
 
-    // NB: The listener below is eventTarget's and has type name, so the event it is called with gives both, and the
-    //     function needs no captures.
+    // The dispatch listener belongs to the handler slot. Its callback can come from another realm.
     auto callback_function = JS::NativeFunction::create(
-        realm, +[](JS::VM& vm) -> JS::ThrowCompletionOr<JS::Value> {
+        realm, GC::create_function(realm.heap(), GC::captures(sandbox_realm != nullptr), [](bool is_sandbox_slot, JS::VM& vm) -> JS::ThrowCompletionOr<JS::Value> {
             // The event dispatcher should only call this with one argument.
             VERIFY(vm.argument_count() == 1);
 
@@ -896,9 +925,10 @@ void EventTarget::activate_event_handler(Utf16FlyString const& name, HTML::Event
             auto* event = Bindings::event_from_callback_argument(vm);
             VERIFY(event);
 
-            TRY(event->current_target()->process_event_handler_for_event(event->type(), *event));
+            auto* slot_realm = is_sandbox_slot ? vm.current_realm() : nullptr;
+            TRY(event->current_target()->process_event_handler_for_event(event->type(), *event, slot_realm));
             return JS::js_undefined();
-        },
+        }),
         0, Utf16FlyString {}, &realm);
 
     // NOTE: As per the spec, the callback context is arbitrary.
@@ -916,10 +946,14 @@ void EventTarget::activate_event_handler(Utf16FlyString const& name, HTML::Event
     event_handler.listener = listener;
 }
 
-void EventTarget::deactivate_event_handler(Utf16FlyString const& name)
+void EventTarget::deactivate_event_handler(Utf16FlyString const& name, JS::Realm* sandbox_realm)
 {
     // 1. Let handlerMap be eventTarget's event handler map.
-    auto& handler_map = ensure_data().event_handler_map;
+    auto& data = ensure_data();
+    auto sandbox = data.sandbox_event_handler_maps.find(GC::Ptr { sandbox_realm });
+    if (sandbox_realm && sandbox == data.sandbox_event_handler_maps.end())
+        return;
+    auto& handler_map = sandbox_realm ? sandbox->value : data.event_handler_map;
 
     // 2. Let eventHandler be handlerMap[name].
     auto event_handler_iterator = handler_map.find(name);
@@ -944,6 +978,8 @@ void EventTarget::deactivate_event_handler(Utf16FlyString const& name)
     // NOTE: This is done out of order since our equivalent of setting value to null is removing the event handler from the map.
     //       Given that event_handler is a reference to an entry, this would invalidate event_handler if we did it in order.
     handler_map.remove(event_handler_iterator);
+    if (sandbox_realm && handler_map.is_empty())
+        data.sandbox_event_handler_maps.remove(sandbox);
 }
 
 // https://dom.spec.whatwg.org/#remove-all-event-listeners
@@ -969,18 +1005,23 @@ void EventTarget::erase_all_event_listeners_and_handlers()
     for (auto const& name : m_data->event_handler_map.keys())
         deactivate_event_handler(name);
 
+    m_data->sandbox_event_handler_maps.clear();
+
     // 2. Remove all event listeners given eventTarget.
     remove_all_event_listeners();
 }
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#the-event-handler-processing-algorithm
-JS::ThrowCompletionOr<void> EventTarget::process_event_handler_for_event(Utf16FlyString const& name, Event& event)
+JS::ThrowCompletionOr<void> EventTarget::process_event_handler_for_event(Utf16FlyString const& name, Event& event, JS::Realm* sandbox_realm)
 {
+    if (sandbox_realm && Bindings::host_defined_wrapper_world(*sandbox_realm).is_detached())
+        return {};
+
     // FIXME: 1. If the result of WebDriver BiDi scripting is enabled with eventTarget's relevant settings object is false,
     //           then return.
 
     // 2. Let callback be the result of getting the current value of the event handler given eventTarget and name.
-    auto* callback = get_current_value_of_event_handler(name);
+    auto* callback = get_current_value_of_event_handler(name, sandbox_realm);
 
     // 3. If callback is null, then return.
     if (!callback)

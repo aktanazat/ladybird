@@ -57,6 +57,8 @@ void navigation_event(HTML::Navigable const&, StringView event_name, Optional<Ut
 //     realm is created as far as WebDriver BiDi can tell, and the preload scripts run in it.
 WEB_API void document_is_ready_for_scripts(DOM::Document&);
 
+void emit_realm_created(HTML::EnvironmentSettingsObject&);
+
 // https://w3c.github.io/webdriver-bidi/#event-script-realmDestroyed
 void unloading_document_cleanup_steps(DOM::Document&);
 

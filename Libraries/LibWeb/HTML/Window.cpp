@@ -163,6 +163,9 @@ JS::HostObject& platform_object_for_window(HTML::Window& window)
 
 JS::HostObject& platform_object_for_window(HTML::Window& window, JS::Realm& realm)
 {
+    auto& global_object = realm.global_object();
+    if (window_from_global_object(global_object) == &window)
+        return *as_platform_object(global_object);
     auto& wrapper_world = Bindings::host_defined_wrapper_world(realm);
     return *Bindings::wrap(wrapper_world, realm, GC::Ref { window });
 }
@@ -253,7 +256,7 @@ JS::Value window_named_item_value(WrapperWorld& wrapper_world, JS::Realm& realm,
 {
     return window.named_item(name).visit(
         [](Empty) -> JS::Value { return JS::js_undefined(); },
-        [](GC::Ref<HTML::WindowProxy> const& value) -> JS::Value { return &value->object(); },
+        [&realm](GC::Ref<HTML::WindowProxy> const& value) -> JS::Value { return &value->object_for_realm(realm); },
         [&wrapper_world, &realm](GC::Ref<DOM::Element> const& value) -> JS::Value { return wrap(wrapper_world, realm, value); },
         [&wrapper_world, &realm](GC::Ref<DOM::HTMLCollection> const& value) -> JS::Value { return wrap(wrapper_world, realm, value); });
 }
@@ -1488,7 +1491,7 @@ JS::Value Window::opener() const
         return JS::js_null();
 
     // 4. Return current's opener browsing context's WindowProxy object.
-    return &opener_window_proxy->object();
+    return &opener_window_proxy->object_for_realm(*vm().current_realm());
 }
 
 WebIDL::ExceptionOr<void> Window::set_opener(JS::Value value)
@@ -1504,7 +1507,7 @@ WebIDL::ExceptionOr<void> Window::set_opener(JS::Value value)
     // 2. If the given value is non-null, then perform ? DefinePropertyOrThrow(this, "opener", { [[Value]]: the given value, [[Writable]]: true, [[Enumerable]]: true, [[Configurable]]: true }).
     if (!value.is_null()) {
         JS::PropertyDescriptor descriptor { .value = value, .writable = true, .enumerable = true, .configurable = true };
-        TRY(relevant_global_object(*this).define_property_or_throw(vm().names.opener, descriptor));
+        TRY(Bindings::platform_object_for_window(*this, *vm().current_realm()).define_property_or_throw(vm().names.opener, descriptor));
     }
 
     return {};

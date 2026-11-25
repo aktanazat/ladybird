@@ -321,6 +321,11 @@ void initialize_agent(HTML::AgentType type)
                 return;
         }
 
+        // A sandbox promise and its rejection reason must stay out of the page's shared event target.
+        auto& promise_realm = HTML::relevant_realm(promise);
+        if (promise_realm.host_defined() && host_defined_wrapper_world(promise_realm).type() == WrapperWorld::Type::WebDriverSandbox)
+            return;
+
         // 3. Let settingsObject be the current settings object.
         // 4. If script is not null, then set settings object to script's settings object.
         auto& settings_object = script ? script->settings_object() : HTML::current_settings_object();

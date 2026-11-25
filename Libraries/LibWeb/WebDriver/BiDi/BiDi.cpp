@@ -78,6 +78,7 @@ void set_session_state(BiDiSessionState session_state)
 
     // NB: The objects the handles of a session that ended name are not kept alive any longer.
     if (!g_is_active && was_active) {
+        clear_all_sandbox_realms();
         fail_all_pending_evaluations();
         clear_all_handle_object_maps();
         destroyed_realm_ids().clear();
@@ -123,19 +124,20 @@ void navigation_event(HTML::Navigable const& navigable, StringView event_name, O
 }
 
 // https://w3c.github.io/webdriver-bidi/#event-script-realmCreated
-static void emit_realm_created(DOM::Document& document)
+void emit_realm_created(HTML::EnvironmentSettingsObject& settings)
 {
     if (!is_event_enabled("script.realmCreated"sv))
         return;
 
-    auto navigable = document.navigable();
-    if (!navigable || navigable->active_document().ptr() != &document)
+    auto document = settings.responsible_document();
+    auto navigable = document ? document->navigable() : nullptr;
+    if (!navigable || navigable->active_document() != document)
         return;
 
     // 1. Let environment settings be the newly created environment settings object.
     // 2. Let realm info be the result of get the realm info given environment settings.
     // 3. If realm info is null, return.
-    auto realm_info = get_the_realm_info(document.relevant_settings_object());
+    auto realm_info = get_the_realm_info(settings);
     if (!realm_info.has_value())
         return;
 
@@ -157,7 +159,7 @@ void document_is_ready_for_scripts(DOM::Document& document)
     // AD-HOC: The settings object of a window is set up before the window has an associated Document with a navigable,
     //         when getting its realm info returns null. The realm is reported as created once its document is active
     //         in a navigable instead.
-    emit_realm_created(document);
+    emit_realm_created(document.relevant_settings_object());
 
     // https://w3c.github.io/webdriver-bidi/#run-webdriver-bidi-preload-scripts
     run_webdriver_bidi_preload_scripts(document.relevant_settings_object());
@@ -192,15 +194,19 @@ void unloading_document_cleanup_steps(DOM::Document& document)
         return;
     destroyed_realm_ids().set(id);
 
-    if (navigable && is_event_enabled("script.realmDestroyed"sv)) {
-        JsonObject params;
-        params.set("realm"sv, move(id));
-        emit_event(*navigable, "script.realmDestroyed"_string, move(params));
-    }
+    Function<void(HTML::EnvironmentSettingsObject&)> destroy_realm = [&](HTML::EnvironmentSettingsObject& realm_settings) {
+        if (navigable && is_event_enabled("script.realmDestroyed"sv)) {
+            JsonObject params;
+            params.set("realm"sv, realm_id(realm_settings));
+            emit_event(*navigable, "script.realmDestroyed"_string, move(params));
+        }
 
-    // NB: The realm is discarded, and the objects its handles name with it.
-    clear_handle_object_map(settings);
-    fail_pending_evaluations(settings);
+        // NB: The realm is discarded, and the objects its handles name with it.
+        clear_handle_object_map(realm_settings);
+        fail_pending_evaluations(realm_settings);
+    };
+    unload_sandbox_realms(document, destroy_realm);
+    destroy_realm(settings);
 }
 
 static StringView method_for_log_level(JS::Console::LogLevel log_level)
