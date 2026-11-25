@@ -29,6 +29,8 @@ struct WebViewHints {
     Optional<DevicePixels> height;
     Optional<DevicePixels> screen_x;
     Optional<DevicePixels> screen_y;
+    // A WebDriver BiDi browsingContext.create of type "window" wants its own OS window, not a tab.
+    bool new_window = false;
 };
 
 }

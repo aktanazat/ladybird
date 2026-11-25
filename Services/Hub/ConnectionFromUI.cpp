@@ -1089,6 +1089,12 @@ void ConnectionFromUI::view_set_current_tab_of_window(u64 view_id, bool current_
         view->set_current_tab_of_window(current_tab_of_window);
 }
 
+void ConnectionFromUI::view_set_os_window(u64 view_id, u64 os_window_id)
+{
+    if (auto* view = find_view(view_id))
+        view->set_os_window(os_window_id);
+}
+
 void ConnectionFromUI::view_set_presents_from_cpu_memory(u64 view_id, bool presents_from_cpu_memory)
 {
     if (auto* view = find_view(view_id)) {

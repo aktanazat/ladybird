@@ -230,6 +230,11 @@ public:
 
     void set_window_position(Gfx::IntPoint);
     void set_window_size(Gfx::IntSize);
+    Optional<Gfx::IntPoint> window_position() const { return m_window_position; }
+    Optional<Gfx::IntSize> window_size() const { return m_window_size; }
+    // The UI's OS window that shows this tab, which WebDriver BiDi names as the tab's client window.
+    void set_os_window(u64 os_window_id) { m_os_window_id = os_window_id; }
+    Optional<u64> os_window_id() const { return m_os_window_id; }
     void set_system_visibility_state(Web::HTML::VisibilityState);
 
     // A tab that the user doesn't see may be discarded: its pages close, so that the processes hosting them can let go
@@ -1144,6 +1149,7 @@ protected:
     // outerHeight, screenX and screenY like the pages before it.
     Optional<Gfx::IntPoint> m_window_position;
     Optional<Gfx::IntSize> m_window_size;
+    Optional<u64> m_os_window_id;
     Web::CSS::PreferredContrast m_preferred_contrast { Web::CSS::PreferredContrast::Auto };
     Web::CSS::PreferredMotion m_preferred_motion { Web::CSS::PreferredMotion::Auto };
 

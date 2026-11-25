@@ -93,6 +93,7 @@ public:
     void set_system_visibility_state(Web::HTML::VisibilityState visibility_state) { HubConnection::the().async_view_set_system_visibility_state(view_id(), move(visibility_state)); }
     void set_pinned(bool pinned) { HubConnection::the().async_view_set_pinned(view_id(), pinned); }
     void set_current_tab_of_window(bool current_tab_of_window) { HubConnection::the().async_view_set_current_tab_of_window(view_id(), current_tab_of_window); }
+    void set_os_window(u64 os_window_id) { HubConnection::the().async_view_set_os_window(view_id(), os_window_id); }
     void set_presents_from_cpu_memory(bool presents_from_cpu_memory) { HubConnection::the().async_view_set_presents_from_cpu_memory(view_id(), presents_from_cpu_memory); }
     void set_hosts_remote_layer(bool hosts_remote_layer) { HubConnection::the().async_view_set_hosts_remote_layer(view_id(), hosts_remote_layer); }
     void set_wants_frame_notifications(bool wants_frame_notifications) { HubConnection::the().async_view_set_wants_frame_notifications(view_id(), wants_frame_notifications); }

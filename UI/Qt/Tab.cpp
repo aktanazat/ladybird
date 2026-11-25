@@ -299,6 +299,7 @@ void Tab::initialize(Optional<u64> hub_view_id)
     };
     view().set_pinned(m_is_pinned);
     view().set_current_tab_of_window(m_window->current_tab() == this);
+    view().set_os_window(m_window->os_window_id());
 
     view().on_close = [this] {
         auto index = tab_index();
@@ -1085,6 +1086,7 @@ void Tab::set_window(BrowserWindow& window)
     // The tab's pages hold the geometry of the window that hosted them until now.
     m_view->set_window_position({ window.x(), window.y() });
     m_view->set_window_size({ window.width(), window.height() });
+    m_view->set_os_window(window.os_window_id());
 }
 
 void Tab::set_pinned(bool pinned)

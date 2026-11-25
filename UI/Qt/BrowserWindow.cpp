@@ -935,6 +935,10 @@ void BrowserWindow::initialize_tab_view(Tab* tab)
     });
 
     tab->view().on_open_new_view = [this](auto activate_tab, Web::HTML::WebViewHints hints, u64 hub_view_id) {
+        if (hints.new_window) {
+            Application::the().new_window({}, Application::the().configuration_for_new_window(), IsPopupWindow::No, m_is_private, hub_view_id);
+            return;
+        }
         if (hints.popup) {
             auto cascaded_configuration = Application::the().configuration_for_new_window();
             WindowConfiguration configuration {

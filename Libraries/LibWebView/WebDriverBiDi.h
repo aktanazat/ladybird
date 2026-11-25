@@ -152,6 +152,10 @@ private:
     void browsing_context_traverse_history(JsonObject const& params, CommandResult);
     void route_to_navigable(String const& method, JsonObject const& params, CommandResult);
     String os_window_of(String const& top_level_traversable_id) const;
+    void browser_get_client_windows(CommandResult);
+    void storage_get_cookies(JsonObject const& params, CommandResult);
+    void storage_set_cookie(JsonObject const& params, CommandResult);
+    void storage_delete_cookies(JsonObject const& params, CommandResult);
 
     void script_add_preload_script(JsonObject const& params, CommandResult);
     void script_remove_preload_script(JsonObject const& params, CommandResult);

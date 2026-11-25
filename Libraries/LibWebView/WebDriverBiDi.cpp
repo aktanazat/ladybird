@@ -16,6 +16,8 @@
 #include <LibRequests/RequestTimingInfo.h>
 #include <LibURL/Parser.h>
 #include <LibWebView/Application.h>
+#include <LibWebView/BrowsingSession.h>
+#include <LibWebView/CookieJar.h>
 #include <LibWebView/CanonicalNavigable.h>
 #include <LibWebView/CanonicalNavigation.h>
 #include <LibWebView/CanonicalTraversable.h>
@@ -351,8 +353,7 @@ JsonObject WebDriverBiDi::get_the_navigable_info(CanonicalNavigable const& navig
 
     // 10. Let top-level traversable be navigable's top-level traversable.
     // 11. Let client window id be the client window id for top-level traversable's associated client window.
-    // FIXME: Name the OS window a tab is in, rather than the tab.
-    auto client_window_id = navigable_id(navigable.top_level_traversable());
+    auto client_window_id = os_window_of(navigable_id(navigable.top_level_traversable()));
 
     // 12. Let navigable info be a map matching the browsingContext.Info production with the context field set to
     //     navigable id, the parent field set to parent id if include parent id is true, or unset otherwise, the url
@@ -1146,6 +1147,14 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
         return;
     }
 
+    if (method == "browser.getClientWindows"sv)
+        return browser_get_client_windows(move(on_complete));
+    if (method == "storage.getCookies"sv)
+        return storage_get_cookies(params, move(on_complete));
+    if (method == "storage.setCookie"sv)
+        return storage_set_cookie(params, move(on_complete));
+    if (method == "storage.deleteCookies"sv)
+        return storage_delete_cookies(params, move(on_complete));
     if (method == "browsingContext.activate"sv)
         return browsing_context_activate(params, move(on_complete));
     if (method == "browsingContext.close"sv)
@@ -1177,11 +1186,244 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
     on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnknownCommand, "Command is not supported"sv));
 }
 
-// NB: Every top-level traversable that is not a tab created in the OS window of another one has an OS window of its
-//     own, which is named by the traversable's id.
+// NB: A tab is in the OS window the UI says it shows it in. Without a UI to say (a headless browser), every top-level
+//     traversable that is not a tab created in the OS window of another one has an OS window of its own, which is named
+//     by the traversable's id.
 String WebDriverBiDi::os_window_of(String const& top_level_traversable_id) const
 {
+    if (auto traversable = get_a_top_level_traversable(top_level_traversable_id); !traversable.is_error()) {
+        if (auto view = traversable.value()->view(); view.has_value() && view->os_window_id().has_value())
+            return MUST(String::formatted("window-{}", *view->os_window_id()));
+    }
     return m_tab_windows.get(top_level_traversable_id).value_or(top_level_traversable_id);
+}
+
+// https://w3c.github.io/webdriver-bidi/#command-browser-getClientWindows
+void WebDriverBiDi::browser_get_client_windows(CommandResult on_complete)
+{
+    // 1. Let client window ids be an empty set.
+    // 2. Let client window infos be an empty list.
+    Vector<String> client_window_ids;
+    HashMap<String, JsonObject> client_window_infos;
+
+    // 3. For each top-level traversable in the remote end's top-level traversables:
+    for (auto& traversable : all_top_level_traversables()) {
+        // 1. Let client window id be the client window id for top-level traversable's associated client window.
+        auto client_window_id = os_window_of(navigable_id(traversable));
+        auto view = traversable.view();
+
+        // 2. If client window ids does not contain client window id: append the client window info for it.
+        if (!client_window_infos.contains(client_window_id)) {
+            auto position = view.has_value() ? view->window_position().value_or({}) : Gfx::IntPoint {};
+            auto size = view.has_value() ? view->window_size().value_or({}) : Gfx::IntSize {};
+            auto is_fullscreen = view.has_value() && view->is_fullscreen() == Web::ViewportIsFullscreen::Yes;
+
+            JsonObject info;
+            info.set("clientWindow"sv, client_window_id);
+            info.set("active"sv, false);
+            info.set("state"sv, is_fullscreen ? "fullscreen"sv : "normal"sv);
+            info.set("x"sv, position.x());
+            info.set("y"sv, position.y());
+            info.set("width"sv, size.width());
+            info.set("height"sv, size.height());
+            client_window_ids.append(client_window_id);
+            client_window_infos.set(client_window_id, move(info));
+        }
+
+        // NB: A window is active when the tab it shows has system focus.
+        if (traversable.has_system_focus())
+            client_window_infos.find(client_window_id)->value.set("active"sv, true);
+    }
+
+    // 4. Return success with data being a map matching the browser.GetClientWindowsResult production, with the
+    //    clientWindows field set to client window infos.
+    JsonArray client_windows;
+    for (auto const& id : client_window_ids)
+        client_windows.must_append(client_window_infos.take(id).release_value());
+    JsonObject result;
+    result.set("clientWindows"sv, move(client_windows));
+    on_complete(JsonValue { move(result) });
+}
+
+static StringView same_site_name(HTTP::Cookie::SameSite same_site)
+{
+    switch (same_site) {
+    case HTTP::Cookie::SameSite::Strict:
+        return "strict"sv;
+    case HTTP::Cookie::SameSite::Lax:
+        return "lax"sv;
+    case HTTP::Cookie::SameSite::None:
+        return "none"sv;
+    default:
+        return "default"sv;
+    }
+}
+
+static String bidi_domain_of(HTTP::Cookie::Cookie const& cookie)
+{
+    return cookie.host_only ? cookie.domain : MUST(String::formatted(".{}", cookie.domain));
+}
+
+// https://w3c.github.io/webdriver-bidi/#serialize-cookie
+static JsonObject serialize_cookie(HTTP::Cookie::Cookie const& cookie)
+{
+    JsonObject value;
+    value.set("type"sv, "string"sv);
+    value.set("value"sv, cookie.value);
+
+    JsonObject result;
+    result.set("name"sv, cookie.name);
+    result.set("value"sv, move(value));
+    result.set("domain"sv, bidi_domain_of(cookie));
+    result.set("path"sv, cookie.path);
+    result.set("size"sv, cookie.name.bytes().size() + cookie.value.bytes().size());
+    result.set("httpOnly"sv, cookie.http_only);
+    result.set("secure"sv, cookie.secure);
+    result.set("sameSite"sv, same_site_name(cookie.same_site));
+    if (cookie.persistent)
+        result.set("expiry"sv, cookie.expiry_time.seconds_since_epoch());
+    return result;
+}
+
+// The host whose cookies a storage.PartitionDescriptor names: the document of a context, or a source origin.
+static ErrorOr<Optional<String>, Web::WebDriver::Error> partition_host(JsonObject const& params)
+{
+    auto partition = params.get_object("partition"sv);
+    if (!partition.has_value())
+        return Optional<String> {};
+    auto type = TRY(get_string(*partition, "type"sv));
+    Optional<URL::URL> url;
+    if (type == "context"sv) {
+        auto* traversable = TRY(get_a_top_level_traversable(TRY(get_string(*partition, "context"sv))));
+        if (auto view = traversable->view(); view.has_value())
+            url = view->url();
+    } else if (type == "storageKey"sv) {
+        if (auto origin = TRY(get_optional_string(*partition, "sourceOrigin"sv)); origin.has_value())
+            url = URL::Parser::basic_parse(*origin);
+        else
+            return Optional<String> {};
+    } else {
+        return invalid_argument("Parameter 'partition.type' must be 'context' or 'storageKey'"sv);
+    }
+    if (!url.has_value() || !url->host().has_value())
+        return invalid_argument("The partition has no host"sv);
+    return Optional<String> { MUST(String::from_utf8(url->serialized_host())) };
+}
+
+// https://w3c.github.io/webdriver-bidi/#match-cookie
+static bool cookie_matches(HTTP::Cookie::Cookie const& cookie, Optional<JsonObject const&> filter, Optional<String> const& host)
+{
+    if (host.has_value() && !(*host == cookie.domain || (!cookie.host_only && host->bytes_as_string_view().ends_with(ByteString::formatted(".{}", cookie.domain)))))
+        return false;
+    if (!filter.has_value())
+        return true;
+
+    auto serialized = serialize_cookie(cookie);
+    for (auto key : { "name"sv, "domain"sv, "path"sv, "sameSite"sv }) {
+        if (auto wanted = filter->get_string(key); wanted.has_value() && serialized.get_string(key) != wanted)
+            return false;
+    }
+    for (auto key : { "httpOnly"sv, "secure"sv }) {
+        if (auto wanted = filter->get_bool(key); wanted.has_value() && serialized.get_bool(key) != wanted)
+            return false;
+    }
+    for (auto key : { "size"sv, "expiry"sv }) {
+        auto wanted = filter->get(key);
+        if (wanted.has_value() && (!serialized.get(key).has_value() || serialized.get(key)->get_integer<i64>() != wanted->get_integer<i64>()))
+            return false;
+    }
+    if (auto value = filter->get_object("value"sv); value.has_value() && value->get_string("value"sv) != cookie.value)
+        return false;
+    return true;
+}
+
+// https://w3c.github.io/webdriver-bidi/#command-storage-getCookies
+void WebDriverBiDi::storage_get_cookies(JsonObject const& params, CommandResult on_complete)
+{
+    auto host = TRY_OR_COMPLETE(partition_host(params));
+    auto filter = params.get_object("filter"sv);
+
+    JsonArray cookies;
+    for (auto const& cookie : Application::default_session().cookie_jar->get_all_cookies()) {
+        if (cookie.expiry_time < UnixDateTime::now() || !cookie_matches(cookie, filter, host))
+            continue;
+        cookies.must_append(serialize_cookie(cookie));
+    }
+
+    JsonObject partition_key;
+    partition_key.set("userContext"sv, DEFAULT_USER_CONTEXT_ID);
+    JsonObject result;
+    result.set("cookies"sv, move(cookies));
+    result.set("partitionKey"sv, move(partition_key));
+    on_complete(JsonValue { move(result) });
+}
+
+// https://w3c.github.io/webdriver-bidi/#command-storage-setCookie
+void WebDriverBiDi::storage_set_cookie(JsonObject const& params, CommandResult on_complete)
+{
+    auto partial = params.get_object("cookie"sv);
+    if (!partial.has_value())
+        return on_complete(invalid_argument("Parameter 'cookie' must be an object"sv));
+
+    HTTP::Cookie::Cookie cookie;
+    cookie.name = TRY_OR_COMPLETE(get_string(*partial, "name"sv));
+    auto value = partial->get_object("value"sv);
+    if (!value.has_value() || value->get_string("type"sv) != "string"sv)
+        return on_complete(invalid_argument("Parameter 'cookie.value' must be a string value"sv));
+    cookie.value = TRY_OR_COMPLETE(get_string(*value, "value"sv));
+
+    auto domain = TRY_OR_COMPLETE(get_string(*partial, "domain"sv));
+    cookie.host_only = !domain.starts_with('.');
+    cookie.domain = cookie.host_only ? domain : MUST(domain.substring_from_byte_offset(1));
+    cookie.path = TRY_OR_COMPLETE(get_optional_string(*partial, "path"sv)).value_or("/"_string);
+    cookie.http_only = TRY_OR_COMPLETE(get_optional_bool(*partial, "httpOnly"sv)).value_or(false);
+    cookie.secure = TRY_OR_COMPLETE(get_optional_bool(*partial, "secure"sv)).value_or(false);
+    if (auto same_site = TRY_OR_COMPLETE(get_optional_string(*partial, "sameSite"sv)); same_site.has_value()) {
+        if (*same_site == "strict"sv)
+            cookie.same_site = HTTP::Cookie::SameSite::Strict;
+        else if (*same_site == "lax"sv)
+            cookie.same_site = HTTP::Cookie::SameSite::Lax;
+        else if (*same_site == "none"sv)
+            cookie.same_site = HTTP::Cookie::SameSite::None;
+    }
+    if (auto expiry = partial->get("expiry"sv); expiry.has_value()) {
+        auto seconds = expiry->get_integer<i64>();
+        if (!seconds.has_value())
+            return on_complete(invalid_argument("Parameter 'cookie.expiry' must be an integer"sv));
+        cookie.persistent = true;
+        cookie.expiry_time = UnixDateTime::from_seconds_since_epoch(*seconds);
+    }
+
+    auto url = URL::Parser::basic_parse(MUST(String::formatted("https://{}{}", cookie.domain, cookie.path)));
+    if (!url.has_value())
+        return on_complete(invalid_argument("The cookie's domain and path do not make a URL"sv));
+    if (auto result = Application::default_session().cookie_jar->set_cookie_from_devtools(*url, {}, move(cookie)); result.is_error())
+        return on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnableToSetCookie, MUST(String::formatted("{}", result.error()))));
+
+    JsonObject partition_key;
+    partition_key.set("userContext"sv, DEFAULT_USER_CONTEXT_ID);
+    JsonObject result;
+    result.set("partitionKey"sv, move(partition_key));
+    on_complete(JsonValue { move(result) });
+}
+
+// https://w3c.github.io/webdriver-bidi/#command-storage-deleteCookies
+void WebDriverBiDi::storage_delete_cookies(JsonObject const& params, CommandResult on_complete)
+{
+    auto host = TRY_OR_COMPLETE(partition_host(params));
+    auto filter = params.get_object("filter"sv);
+
+    auto& cookie_jar = *Application::default_session().cookie_jar;
+    for (auto const& cookie : cookie_jar.get_all_cookies()) {
+        if (cookie_matches(cookie, filter, host))
+            cookie_jar.delete_cookie({ cookie.name, cookie.domain, cookie.host_only, cookie.path, cookie.partition_key });
+    }
+
+    JsonObject partition_key;
+    partition_key.set("userContext"sv, DEFAULT_USER_CONTEXT_ID);
+    JsonObject result;
+    result.set("partitionKey"sv, move(partition_key));
+    on_complete(JsonValue { move(result) });
 }
 
 // https://w3c.github.io/webdriver-bidi/#command-browsingContext-activate
@@ -1319,9 +1561,9 @@ void WebDriverBiDi::browsing_context_create(JsonObject const& params, CommandRes
         existing_handles.set(navigable_id(traversable));
 
     // NB: The window this opens is WebDriver's, not a pop-up of the page, which the UI process would otherwise block.
-    Application::the().webdriver_will_open_traversable({});
+    Application::the().webdriver_will_open_traversable({}, type == "window"sv);
     run_content_command(*reference_navigable, "browsingContext.create"_string, move(create_params), [this, background, is_tab = type == "tab"sv, reference_handle = move(reference_handle), existing_handles = move(existing_handles), on_complete = move(on_complete)](Web::WebDriver::Response response) mutable {
-        Application::the().webdriver_did_open_traversable({});
+        Application::the().webdriver_did_open_traversable({}, !is_tab);
         if (response.is_error())
             return on_complete(move(response));
 
