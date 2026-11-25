@@ -149,6 +149,7 @@ ErrorOr<JsonObject> registration_result(Request const& request, Credential const
     result.set("attestationObject"sv, TRY(encode(attestation.bytes())));
     result.set("publicKey"sv, TRY(encode(public_key_spki)));
     result.set("publicKeyAlgorithm"sv, -7);
+    result.set("discoverable"sv, credential.discoverable);
     return result;
 }
 

@@ -1353,6 +1353,11 @@ WebDriverBrowserConnection* Application::webdriver_browser_connection()
     return m_webdriver_browser_connection.ptr();
 }
 
+WebAuthentication::VirtualAuthenticators* Application::virtual_authenticators()
+{
+    return m_webdriver_browser_connection ? m_webdriver_browser_connection->virtual_authenticators() : nullptr;
+}
+
 void Application::notify_webdriver_window_created(String const& handle)
 {
     if (auto* connection = webdriver_browser_connection())

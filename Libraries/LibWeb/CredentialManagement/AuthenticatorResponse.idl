@@ -1,0 +1,5 @@
+// https://www.w3.org/TR/webauthn-3/#iface-authenticatorresponse
+[Exposed=Window, SecureContext, ImplementedIn=Rust]
+interface AuthenticatorResponse {
+    [SameObject] readonly attribute ArrayBuffer clientDataJSON;
+};

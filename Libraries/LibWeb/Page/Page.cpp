@@ -182,6 +182,7 @@ void Page::visit_edges(JS::Cell::Visitor& visitor)
     for (auto const& request : m_pending_geolocation_requests)
         visitor.visit(request.value.callback);
     visitor.visit(m_pending_permission_requests);
+    visitor.visit(m_pending_webauthn_requests);
     visitor.visit(m_notifications_list);
     visitor.visit(m_unloading_canceled_checks);
     m_pending_fullscreen_operations.for_each([&](auto const& operation) {
@@ -1795,6 +1796,30 @@ void Page::permission_request_completed(u64 request_id, Web::Permissions::Effect
 {
     if (auto callback = m_pending_permission_requests.take(request_id); callback.has_value())
         callback.value()->function()(state);
+}
+
+u64 Page::request_webauthn(HTML::CrossProcessId document_id, JsonObject request, WebAuthenticationCallback callback)
+{
+    auto id = m_next_webauthn_request_id++;
+    m_pending_webauthn_requests.set(id, callback);
+    client().page_did_request_webauthn(id, document_id, move(request));
+    return id;
+}
+
+void Page::cancel_webauthn(u64 request_id)
+{
+    if (m_pending_webauthn_requests.remove(request_id))
+        client().page_did_cancel_webauthn(request_id);
+}
+
+void Page::webauthn_completed(u64 request_id, JsonObject response)
+{
+    if (auto callback = m_pending_webauthn_requests.take(request_id); callback.has_value())
+        callback.value()->function()(move(response));
+}
+
+void PageClient::page_did_request_webauthn(u64, HTML::CrossProcessId, JsonObject)
+{
 }
 
 void Page::add_unloading_canceled_check(Badge<HTML::CheckUnloadingCanceledState>, GC::Ref<HTML::CheckUnloadingCanceledState> check)

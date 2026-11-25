@@ -140,7 +140,7 @@ def has_sequence_of_cells(idl_type: IDLType, context: GenerationContext) -> bool
     )
 
 
-def write_dictionary_to_js(out: TextIO, context: GenerationContext, dictionary: Dictionary) -> None:
+def write_dictionary_to_js(out: TextIO, context: GenerationContext, dictionary: Dictionary, *, roots_input: bool) -> None:
     """The conversion of the dictionary's struct, which the implementation defines with a field per member: the type
     of a required member or of one with a default value, and an Option of it otherwise. The fields are bound to locals
     with names of their own, so that a member can have any name, and the keys of the members are interned once."""
@@ -150,7 +150,8 @@ def write_dictionary_to_js(out: TextIO, context: GenerationContext, dictionary: 
     conversions = []
     prepared_members = []
     borrows_dictionary = dictionary_holds_sequence_of_cells(dictionary, context)
-    impl_type = f"&{path}" if borrows_dictionary else path
+    lifetime = "<'_>" if roots_input and borrows_dictionary else ""
+    impl_type = f"&{path}{lifetime}" if borrows_dictionary else path
     # NB: The least-derived dictionary comes first, as in the C++ bindings.
     inheritance_chain = list(reversed(context.dictionary_inheritance_stack(dictionary)))
     if any(dictionary_holds_sequence_of_cells(ancestor, context) for ancestor in inheritance_chain[:-1]):
@@ -175,15 +176,25 @@ def write_dictionary_to_js(out: TextIO, context: GenerationContext, dictionary: 
                 )
             # Keep the original dictionary in its root while copying its sequence into a MarkedVec.
             if member.required or member.default_value is not None:
+                values = f"&{local}.values()" if roots_input else f"{local}.as_slice()"
                 prepared_members.append(
-                    f"            let {local} = crate::bindings::conversions::mark_sequence(cx, {local}.as_slice());\n"
+                    f"            let {local} = crate::bindings::conversions::mark_sequence(cx, {values});\n"
+                )
+            elif roots_input:
+                prepared_members.append(
+                    f"            let {local} = {local}.as_ref().map(|value| crate::bindings::conversions::mark_sequence(cx, &value.values()));\n"
                 )
             else:
                 prepared_members.append(
                     f"            let {local} = {local}.as_deref().map(|value| crate::bindings::conversions::mark_sequence(cx, value));\n"
                 )
         elif borrows_dictionary:
-            prepared_members.append(f"            let {local} = ToOwned::to_owned({local});\n")
+            nested = context.dictionaries.get(member.type.without_nullable().name)
+            if nested is not None and dictionary_holds_sequence_of_cells(nested, context):
+                if not member.required and member.default_value is None:
+                    prepared_members.append(f"            let {local} = {local}.as_ref();\n")
+            else:
+                prepared_members.append(f"            let {local} = ToOwned::to_owned({local});\n")
         key = f"{rust_identifier(member.name).removeprefix('r#').rstrip('_').upper()}_KEY"
         keys.append(
             f'            static {key}: LazyLock<PropertyKey> = LazyLock::new(|| PropertyKey::from_utf8("{member.name}"));\n'

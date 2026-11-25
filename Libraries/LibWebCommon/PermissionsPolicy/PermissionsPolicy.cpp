@@ -38,6 +38,10 @@ StringView policy_controlled_feature_token(PolicyControlledFeature feature)
         return "picture-in-picture"sv;
     case PolicyControlledFeature::WindowManagement:
         return "window-management"sv;
+    case PolicyControlledFeature::PublicKeyCredentialsCreate:
+        return "publickey-credentials-create"sv;
+    case PolicyControlledFeature::PublicKeyCredentialsGet:
+        return "publickey-credentials-get"sv;
     }
     VERIFY_NOT_REACHED();
 }
@@ -71,6 +75,8 @@ DefaultAllowlist default_allowlist(PolicyControlledFeature feature)
     case PolicyControlledFeature::Microphone:
     // https://w3c.github.io/window-management/#api-permission-policy-integration
     case PolicyControlledFeature::WindowManagement:
+    case PolicyControlledFeature::PublicKeyCredentialsCreate:
+    case PolicyControlledFeature::PublicKeyCredentialsGet:
         return DefaultAllowlist::Self;
     // https://html.spec.whatwg.org/multipage/infrastructure.html#focus-without-user-activation-feature
     // AD-HOC: Allow cross-origin script focus as in Chromium and Firefox; the specification's default is "self".

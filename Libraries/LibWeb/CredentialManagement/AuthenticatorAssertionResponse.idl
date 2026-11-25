@@ -1,0 +1,7 @@
+// https://www.w3.org/TR/webauthn-3/#iface-authenticatorassertionresponse
+[Exposed=Window, SecureContext, ImplementedIn=Rust]
+interface AuthenticatorAssertionResponse : AuthenticatorResponse {
+    [SameObject] readonly attribute ArrayBuffer authenticatorData;
+    [SameObject] readonly attribute ArrayBuffer signature;
+    [SameObject] readonly attribute ArrayBuffer? userHandle;
+};

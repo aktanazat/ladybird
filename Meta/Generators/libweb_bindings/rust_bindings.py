@@ -2642,7 +2642,7 @@ pub(crate) mod definitions {
         if directions.from_js:
             write_dictionary_from_js(out, context, dictionary)
         if directions.to_js:
-            write_dictionary_to_js(out, context, dictionary)
+            write_dictionary_to_js(out, context, dictionary, roots_input=directions.from_js)
         write_rust_dictionary_json_conversions(out, context, dictionary)
     for name, directions in usage.rust_enumerations.items():
         enumeration = context.enumerations[name]

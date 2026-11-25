@@ -1372,6 +1372,16 @@ void PageClient::page_did_request_geolocation_position(u64 request_id, Web::HTML
     client().async_did_request_geolocation_position(m_id, request_id, requesting_document_id);
 }
 
+void PageClient::page_did_request_webauthn(u64 request_id, Web::HTML::CrossProcessId document_id, JsonObject request)
+{
+    client().async_did_request_webauthn(m_id, request_id, document_id, JsonValue { move(request) });
+}
+
+void PageClient::page_did_cancel_webauthn(u64 request_id)
+{
+    client().async_did_cancel_webauthn(m_id, request_id);
+}
+
 void PageClient::page_did_request_permission(u64 request_id, Web::HTML::CrossProcessId requesting_document_id, Utf16String const& name)
 {
     client().async_did_request_permission(m_id, request_id, requesting_document_id, name);

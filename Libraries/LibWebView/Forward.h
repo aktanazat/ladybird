@@ -13,6 +13,10 @@
 
 namespace WebView {
 
+namespace WebAuthentication {
+class VirtualAuthenticators;
+}
+
 class Application;
 class ApplyHistoryStep;
 class AudioServerControlClient;

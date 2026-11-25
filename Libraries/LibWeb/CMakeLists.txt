@@ -48,6 +48,7 @@ set(SOURCES
     ContentSecurityPolicy/Violation.cpp
     CookieStore/CookieStore.cpp
     CredentialManagement/CredentialsContainer.cpp
+    CredentialManagement/WebAuthentication.cpp
     Crypto/Crypto.cpp
     Crypto/CryptoKey.cpp
     CSS/Angle.cpp

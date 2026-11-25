@@ -411,6 +411,11 @@ public:
     void request_permission(HTML::CrossProcessId requesting_document_id, Utf16String const& name, PermissionPromptCallback);
     void permission_request_completed(u64 request_id, Web::Permissions::EffectiveState);
 
+    using WebAuthenticationCallback = GC::Ref<GC::Function<void(JsonObject)>>;
+    u64 request_webauthn(HTML::CrossProcessId document_id, JsonObject request, WebAuthenticationCallback);
+    void cancel_webauthn(u64 request_id);
+    void webauthn_completed(u64 request_id, JsonObject response);
+
     // The list of notifications (https://notifications.spec.whatwg.org/#list-of-notifications) this page has asked
     // the UI process to show, by the id that names each one across the bridge.
     u64 allocate_notification_id() { return m_next_notification_id++; }
@@ -686,6 +691,8 @@ private:
 
     HashMap<u64, PermissionPromptCallback> m_pending_permission_requests;
     u64 m_next_permission_request_id { 0 };
+    HashMap<u64, WebAuthenticationCallback> m_pending_webauthn_requests;
+    u64 m_next_webauthn_request_id { 0 };
 
     HashMap<u64, GC::Ref<NotificationsAPI::Notification>> m_notifications_list;
     u64 m_next_notification_id { 0 };
@@ -1000,6 +1007,8 @@ public:
     virtual void page_did_cancel_geolocation_position_request([[maybe_unused]] u64 request_id) { }
     virtual void page_did_start_geolocation_position_watch([[maybe_unused]] u64 request_id, [[maybe_unused]] HTML::CrossProcessId requesting_document_id) { }
     virtual void page_did_stop_geolocation_position_watch([[maybe_unused]] u64 request_id) { }
+    virtual void page_did_request_webauthn(u64, HTML::CrossProcessId, JsonObject);
+    virtual void page_did_cancel_webauthn(u64) { }
     virtual void page_did_request_permission([[maybe_unused]] u64 request_id, [[maybe_unused]] HTML::CrossProcessId requesting_document_id, [[maybe_unused]] Utf16String const& name) { }
     virtual Optional<Web::Permissions::PermissionSnapshot> page_did_request_permission_snapshot([[maybe_unused]] URL::Origin const& top_level_origin) { return {}; }
     virtual Optional<Web::Permissions::PermissionSnapshot> page_did_set_permission_for_testing([[maybe_unused]] HTML::CrossProcessId document_id, [[maybe_unused]] String const& name, [[maybe_unused]] String const& state) { return {}; }

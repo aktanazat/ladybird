@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include <AK/Base64.h>
 #include <AK/Debug.h>
 #include <AK/JsonArray.h>
 #include <AK/JsonObject.h>
@@ -14,6 +15,7 @@
 #include <LibWebCommon/Geolocation/GeolocationPositionErrorCode.h>
 #include <LibWebCommon/HTML/BrowsingContext.h>
 #include <LibWebCommon/Page/InputEvent.h>
+#include <LibURL/Parser.h>
 #include <LibWebCommon/SecureContexts/AbstractOperations.h>
 #include <LibWebCommon/WebDriver/Error.h>
 #include <LibWebView/Application.h>
@@ -43,6 +45,7 @@
 #include <LibWebView/WebContentClient.h>
 #include <LibWebView/WebContentPage.h>
 #include <LibWebView/WebContentTestClient.h>
+#include <LibWebView/WebAuthentication.h>
 #include <LibWebView/WebDriverBiDi.h>
 #include <LibWebView/WebUI.h>
 #include <LibWebView/WorkerAgentManager.h>
@@ -1873,6 +1876,153 @@ RefPtr<CanonicalDocument> WebContentPage::hosted_document_with_id(Web::HTML::Cro
         return IterationDecision::Break;
     });
     return found;
+}
+
+// https://www.w3.org/TR/webauthn-3/#relying-party-identifier
+static Optional<String> relying_party_id(URL::Origin const& origin, Optional<String const&> requested_rp)
+{
+    if (origin.is_opaque() || !origin.host().has<String>())
+        return {};
+    auto const& effective_domain = origin.host().get<String>();
+    if (!requested_rp.has_value())
+        return effective_domain;
+
+    auto rp = URL::Parser::parse_host(Utf16String::from_utf8(*requested_rp));
+    if (!rp.has_value() || !rp->has<String>())
+        return {};
+    auto const& domain = rp->get<String>();
+    if (domain == effective_domain)
+        return domain;
+
+    auto domain_view = domain.bytes_as_string_view();
+    auto effective = effective_domain.bytes_as_string_view();
+    if (!effective.ends_with(domain_view) || effective.length() <= domain_view.length()
+        || effective[effective.length() - domain_view.length() - 1] != '.')
+        return {};
+    if (!rp->registrable_domain().has_value())
+        return {};
+    return domain;
+}
+
+static WebAuthentication::Requirement webauthn_requirement(Optional<String const&> value)
+{
+    using WebAuthentication::Requirement;
+    if (value == "required"sv)
+        return Requirement::Required;
+    if (value == "discouraged"sv)
+        return Requirement::Discouraged;
+    return Requirement::Preferred;
+}
+
+void WebContentPage::did_request_webauthn(u64 request_id, Web::HTML::CrossProcessId document_id, JsonValue payload)
+{
+    namespace Auth = WebAuthentication;
+    auto fail = [&](StringView exception, StringView message) {
+        async_webauthn_completed(request_id, JsonValue { Auth::failure(exception, message) });
+    };
+    if (!payload.is_object())
+        return fail("TypeError"sv, "Invalid WebAuthn request"sv);
+    auto const& parameters = payload.as_object();
+    if (!m_is_open || !m_traversable)
+        return fail("NotAllowedError"sv, "The requesting document is no longer active"sv);
+
+    // Use the active document hosted by this connection. The renderer supplies neither the caller's origin nor client data.
+    CanonicalNavigable const* navigable = nullptr;
+    for_each_navigable_with_a_hosted_active_document([&](CanonicalNavigable const& candidate) {
+        if (candidate.active_document().id() != document_id)
+            return IterationDecision::Continue;
+        navigable = &candidate;
+        return IterationDecision::Break;
+    });
+    if (!navigable || !hosts_active_document_of(*navigable) || navigable->active_document().unload_counter() != 0)
+        return fail("NotAllowedError"sv, "The requesting document is no longer active"sv);
+    auto const& document = navigable->active_document();
+    auto const& origin = document.origin();
+    bool cross_origin = false;
+    for (auto const* ancestor = navigable; ancestor; ancestor = ancestor->parent()) {
+        auto const& ancestor_origin = ancestor->active_document().origin();
+        if (Web::SecureContexts::is_origin_potentially_trustworthy(ancestor_origin) != Web::SecureContexts::Trustworthiness::PotentiallyTrustworthy)
+            return fail("SecurityError"sv, "WebAuthn requires a secure context"sv);
+        cross_origin |= !origin.is_same_origin(ancestor_origin);
+    }
+    if (origin.is_opaque())
+        return fail("SecurityError"sv, "WebAuthn requires a non-opaque origin"sv);
+
+    auto* authenticators = Application::the().virtual_authenticators();
+    auto operation = parameters.get_string("operation"sv);
+    if (operation == "availability"sv) {
+        JsonObject result;
+        result.set("available"sv, authenticators && authenticators->has_user_verifying_platform_authenticator());
+        async_webauthn_completed(request_id, JsonValue { move(result) });
+        return;
+    }
+    auto registration = operation == "create"sv;
+    if (!registration && operation != "get"sv)
+        return fail("NotSupportedError"sv, "Unknown WebAuthn operation"sv);
+
+    using Web::PermissionsPolicy::PolicyControlledFeature;
+    auto feature = registration ? PolicyControlledFeature::PublicKeyCredentialsCreate : PolicyControlledFeature::PublicKeyCredentialsGet;
+    if (!document.is_allowed_to_use(feature))
+        return fail("NotAllowedError"sv, "WebAuthn is disallowed by the document's permissions policy"sv);
+    if (registration && cross_origin && !consume_transient_user_activation())
+        return fail("NotAllowedError"sv, "Cross-origin registration requires user activation"sv);
+
+    auto requested_rp_id = parameters.get_string("rpId"sv);
+    if (parameters.has("rpId"sv) && !parameters.get("rpId"sv)->is_null() && !requested_rp_id.has_value())
+        return fail("TypeError"sv, "Invalid WebAuthn relying party ID"sv);
+    auto rp_id = relying_party_id(origin, requested_rp_id);
+    if (!rp_id.has_value())
+        return fail("SecurityError"sv, "The relying party ID is outside the caller's origin"sv);
+    auto challenge = parameters.get_string("challenge"sv);
+    if (!challenge.has_value() || challenge->bytes().size() > 128 * KiB || decode_base64url(*challenge).is_error())
+        return fail("TypeError"sv, "Invalid WebAuthn challenge"sv);
+
+    JsonObject client_data;
+    client_data.set("type"sv, registration ? "webauthn.create"sv : "webauthn.get"sv);
+    client_data.set("challenge"sv, *challenge);
+    client_data.set("origin"sv, origin.serialize());
+    client_data.set("crossOrigin"sv, cross_origin);
+    if (cross_origin)
+        client_data.set("topOrigin"sv, traversable().active_document().origin().serialize());
+
+    Auth::Request request;
+    request.rp_id = rp_id.release_value();
+    request.client_data_json = client_data.serialized();
+    request.user_verification = webauthn_requirement(parameters.get_string("userVerification"sv));
+    auto ids = parameters.get_array("credentialIds"sv);
+    if (!ids.has_value())
+        return fail("TypeError"sv, "Invalid WebAuthn credential list"sv);
+    for (auto const& id : ids->values()) {
+        if (id.is_string() && id.as_string().bytes().size() <= 1364)
+            request.credential_ids.append(id.as_string());
+    }
+    // Keep a supplied allow list restrictive even when none of its entries is usable.
+    if (!registration && !ids->is_empty() && request.credential_ids.is_empty())
+        return fail("NotAllowedError"sv, "No compatible credential IDs were provided"sv);
+    if (registration) {
+        auto user_handle = parameters.get_string("userHandle"sv);
+        if (!user_handle.has_value() || user_handle->is_empty() || user_handle->bytes().size() > 86 || decode_base64url(*user_handle).is_error())
+            return fail("TypeError"sv, "The user handle must contain 1 to 64 bytes"sv);
+        if (parameters.get_i32("algorithm"sv) != -7)
+            return fail("NotSupportedError"sv, "The authenticator supports ES256"sv);
+        request.user_handle = String { *user_handle };
+        if (auto user_name = parameters.get_string("userName"sv); user_name.has_value())
+            request.user_name = *user_name;
+        request.resident_key = webauthn_requirement(parameters.get_string("residentKey"sv));
+        if (auto attachment = parameters.get_string("attachment"sv); attachment == "platform"sv)
+            request.attachment = Auth::Attachment::Platform;
+        else if (attachment == "cross-platform"sv)
+            request.attachment = Auth::Attachment::CrossPlatform;
+    }
+    if (authenticators && !authenticators->is_empty()) {
+        async_webauthn_completed(request_id, JsonValue { authenticators->perform(request) });
+        return;
+    }
+    fail("NotAllowedError"sv, "No platform authenticator is available"sv);
+}
+
+void WebContentPage::did_cancel_webauthn(u64)
+{
 }
 
 void WebContentPage::did_request_permission(u64 request_id, Web::HTML::CrossProcessId document_id, Utf16String name)

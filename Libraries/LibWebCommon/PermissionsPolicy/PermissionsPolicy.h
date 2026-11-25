@@ -33,9 +33,11 @@ enum class PolicyControlledFeature : u8 {
     Microphone,
     PictureInPicture,
     WindowManagement,
+    PublicKeyCredentialsCreate,
+    PublicKeyCredentialsGet,
 };
 
-static constexpr size_t supported_feature_count = to_underlying(PolicyControlledFeature::WindowManagement) + 1;
+static constexpr size_t supported_feature_count = to_underlying(PolicyControlledFeature::PublicKeyCredentialsGet) + 1;
 
 WEBCOMMON_API StringView policy_controlled_feature_token(PolicyControlledFeature);
 WEBCOMMON_API Optional<PolicyControlledFeature> policy_controlled_feature_from_token(StringView);

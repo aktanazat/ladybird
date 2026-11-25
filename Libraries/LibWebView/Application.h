@@ -269,6 +269,7 @@ public:
     void webdriver_browser_connection_died(Badge<WebDriverBrowserConnection>);
     void attach_webdriver(ByteString const& endpoint);
     void detach_webdriver(Badge<WebDriverBrowserConnection>);
+    WebAuthentication::VirtualAuthenticators* virtual_authenticators();
     void push_webdriver_session_config(ViewImplementation&);
     void push_webdriver_session_config(WebContentPage&);
     void update_webdriver_session_config(Badge<WebDriverBrowserConnection>, Function<void(WebDriverSessionConfig&)> update);

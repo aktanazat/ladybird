@@ -613,14 +613,20 @@ def union_holds_sequence_of_cells(idl_type: IDLType, context: GenerationContext)
     )
 
 
-def dictionary_holds_sequence_of_cells(dictionary: Dictionary, context: GenerationContext) -> bool:
-    """Whether a member of the dictionary is a sequence of values that are or can hold cells, or a union with such a
-    member, which the struct of the dictionary keeps alive in a MarkedVec, for as long as the reference to the VM that
-    it was converted with lives."""
-    return any(
-        is_sequence_of_cells(member.type, context) or union_holds_sequence_of_cells(member.type, context)
-        for member in dictionary.members
-    )
+def dictionary_holds_sequence_of_cells(
+    dictionary: Dictionary, context: GenerationContext, ancestors: frozenset[str] = frozenset()
+) -> bool:
+    """Whether the dictionary or a dictionary member needs a VM lifetime to keep a sequence rooted."""
+    if dictionary.name in ancestors:
+        return False
+    ancestors = ancestors | {dictionary.name}
+    for member in dictionary.members:
+        if is_sequence_of_cells(member.type, context) or union_holds_sequence_of_cells(member.type, context):
+            return True
+        nested = context.dictionaries.get(member.type.without_nullable().name)
+        if nested is not None and dictionary_holds_sequence_of_cells(nested, context, ancestors):
+            return True
+    return False
 
 
 def rust_dictionary_type(dictionary: Dictionary, context: GenerationContext) -> str:

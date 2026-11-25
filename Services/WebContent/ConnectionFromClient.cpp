@@ -3558,6 +3558,21 @@ void ConnectionFromClient::geolocation_position_response(Web::PageId page_id, u6
         page->geolocation_position_response(request_id, position, error_code);
 }
 
+void ConnectionFromClient::webauthn_completed(Web::PageId page_id, u64 request_id, JsonValue response)
+{
+    auto page = this->page(page_id);
+    if (!page.has_value())
+        return;
+    if (!response.is_object()) {
+        JsonObject error;
+        error.set("error"sv, "UnknownError"sv);
+        error.set("message"sv, "Invalid reply from the authenticator"sv);
+        page->page().webauthn_completed(request_id, move(error));
+        return;
+    }
+    page->page().webauthn_completed(request_id, move(response.as_object()));
+}
+
 void ConnectionFromClient::permission_request_completed(Web::PageId page_id, u64 request_id, Web::Permissions::EffectiveState state)
 {
     if (auto page = this->page(page_id); page.has_value())
