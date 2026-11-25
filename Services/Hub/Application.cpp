@@ -11,7 +11,9 @@
 #include <Hub/ConnectionFromUI.h>
 #include <Hub/Proxies.h>
 #include <LibCore/ArgsParser.h>
+#include <LibCore/Environment.h>
 #include <LibCore/EventLoop.h>
+#include <LibCore/Process.h>
 #include <LibIPC/Decoder.h>
 #include <LibWebView/UpdateCheck.h>
 #include <LibWebView/WebContentPage.h>
@@ -104,6 +106,15 @@ void Application::notify_webdriver_window_created(String const& handle)
 
 void Application::ui_did_start()
 {
+    // NB: An app installed to be driven names, in LADYBIRD_ATTACH_HELPER, the program that attaches to it (the harness
+    //     bridge). The browser starts it once its UI runs, so it has something to attach to, in a process group of its
+    //     own; whatever starts the browser (the Dock, a link, a driver that wants it) starts its driver too.
+    if (!m_ui_did_start && browser_options().allow_webdriver_attach) {
+        if (auto helper = Core::Environment::get("LADYBIRD_ATTACH_HELPER"sv); helper.has_value() && !helper->is_empty()) {
+            if (auto result = Core::Process::spawn({ .executable = ByteString { *helper }, .new_process_group = true }); result.is_error())
+                warnln("Could not start the attach helper {}: {}", *helper, result.error());
+        }
+    }
     m_ui_did_start = true;
     for (auto const& handle : m_webdriver_windows_awaiting_ui)
         WebView::Application::notify_webdriver_window_created(handle);
