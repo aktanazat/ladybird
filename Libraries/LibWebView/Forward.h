@@ -73,6 +73,7 @@ class VideoDecoderServerControlClient;
 class ViewImplementation;
 class WebContentClient;
 class WebContentTestClient;
+class WebDriverBiDi;
 class WebDriverBrowserConnection;
 class WebWorkerClient;
 class WebUI;

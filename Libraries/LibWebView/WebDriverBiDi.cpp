@@ -15,6 +15,7 @@
 #include <LibCore/EventLoop.h>
 #include <LibRequests/RequestTimingInfo.h>
 #include <LibURL/Parser.h>
+#include <LibWebView/Application.h>
 #include <LibWebView/CanonicalNavigable.h>
 #include <LibWebView/CanonicalNavigation.h>
 #include <LibWebView/CanonicalTraversable.h>
@@ -1317,7 +1318,10 @@ void WebDriverBiDi::browsing_context_create(JsonObject const& params, CommandRes
     for (auto& traversable : all_top_level_traversables())
         existing_handles.set(navigable_id(traversable));
 
+    // NB: The window this opens is WebDriver's, not a pop-up of the page, which the UI process would otherwise block.
+    Application::the().webdriver_will_open_traversable({});
     run_content_command(*reference_navigable, "browsingContext.create"_string, move(create_params), [this, background, is_tab = type == "tab"sv, reference_handle = move(reference_handle), existing_handles = move(existing_handles), on_complete = move(on_complete)](Web::WebDriver::Response response) mutable {
+        Application::the().webdriver_did_open_traversable({});
         if (response.is_error())
             return on_complete(move(response));
 

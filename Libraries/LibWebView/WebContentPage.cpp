@@ -3437,7 +3437,7 @@ Messages::WebContentClient::DidRequestNewWebViewResponse WebContentPage::did_req
         //     configured to not show popups
         // NB: The popup blocker runs in the renderer, which a compromised renderer skips, so the UI process checks the
         //     activation of the input it delivered to the page.
-        if (Application::the().blocks_pop_ups() && !has_transient_user_activation())
+        if (Application::the().blocks_pop_ups() && !has_transient_user_activation() && !Application::the().webdriver_is_opening_traversable())
             return { {}, {}, {}, {}, {}, {}, {}, Web::HTML::VisibilityState::Hidden, {} };
     }
 

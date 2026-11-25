@@ -66,7 +66,12 @@ static Web::WebDriver::Response create_a_new_top_level_traversable(Web::HTML::Na
 
     auto& active_window = *local_navigable->active_window();
     Web::HTML::TemporaryExecutionContext execution_context { active_window.document()->relevant_settings_object() };
+    // NB: A window WebDriver asks for is no pop-up of the page, which in the user's own browser still blocks them.
+    auto& page = active_window.page();
+    auto blocks_pop_ups = page.should_block_pop_ups();
+    page.set_should_block_pop_ups(false);
     auto opened_window = active_window.window_open_steps_internal(u"about:blank"sv, u""sv, u"noopener"sv);
+    page.set_should_block_pop_ups(blocks_pop_ups);
     if (opened_window.is_error() || !opened_window.value().navigable)
         return Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnsupportedOperation, "Unable to create a top-level traversable"sv);
 
