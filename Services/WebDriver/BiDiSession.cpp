@@ -107,6 +107,7 @@ static constexpr auto s_command_names = to_array<StringView>({
     "webExtension.uninstall"sv,
     // https://w3c.github.io/webdriver-bidi/#protocol-definition: an extension command, named prefix:name.
     "ladybird:moveTab"sv,
+    "ladybird:setAction"sv,
 });
 
 // https://w3c.github.io/webdriver-bidi/#module-name
@@ -149,6 +150,8 @@ static constexpr auto s_event_names = to_array<StringView>({
     "script.message"sv,
     "script.realmCreated"sv,
     "script.realmDestroyed"sv,
+    // An extension event: the user clicked the toolbar button ladybird:setAction shows.
+    "ladybird:action.clicked"sv,
 });
 
 // https://w3c.github.io/webdriver-bidi/#remote-end-subscribe-steps

@@ -164,6 +164,17 @@ public:
     bool url_is_hidden() const { return m_location_edit->url_is_hidden(); }
     void set_url_is_hidden(bool url_is_hidden) { m_location_edit->set_url_is_hidden(url_is_hidden); }
 
+    // The toolbar button an attached WebDriver BiDi session shows on this tab (ladybird:setAction): its tooltip, and
+    // the text on it. An empty title shows none.
+    QString const& action_title() const { return m_action_title; }
+    QString const& action_badge() const { return m_action_badge; }
+    void set_action(QString const& title, QString const& badge)
+    {
+        m_action_title = title;
+        m_action_badge = badge;
+        emit action_changed();
+    }
+
 public:
     void show_private_session_popover();
     void show_bookmark_popover();
@@ -187,6 +198,7 @@ signals:
     void loading_changed();
     void performance_stats_changed();
     void loaded();
+    void action_changed();
 
 private:
     void create_tab_shell();
@@ -240,6 +252,8 @@ private:
     Optional<WakeLock::DisplaySleepInhibitor> m_screen_display_sleep_inhibitor;
     BrowserWindow* m_window { nullptr };
     QString m_title;
+    QString m_action_title;
+    QString m_action_badge;
     Optional<QString> m_fixed_title;
     Optional<u64> m_report_review_navigation_listener;
     bool m_has_loaded_report_review_page { false };

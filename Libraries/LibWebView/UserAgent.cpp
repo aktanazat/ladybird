@@ -5,6 +5,7 @@
  */
 
 #include "UserAgent.h"
+#include <AK/ByteString.h>
 
 namespace WebView {
 
@@ -19,10 +20,12 @@ OrderedHashMap<StringView, StringView> const& user_agents = *new OrderedHashMap<
     { "Safari iOS Mobile"sv, "Mozilla/5.0 (iPhone; CPU iPhone OS 27_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.2 Mobile/15E148 Safari/604.1"sv },
 };
 
+// NB: A name may join its words with dashes ("safari-macos-desktop"), as a launch argument split at spaces needs.
 Optional<StringView> normalize_user_agent_name(StringView name)
 {
+    auto spaced = name.replace("-"sv, " "sv, ReplaceMode::All);
     for (auto const& user_agent : user_agents) {
-        if (user_agent.key.equals_ignoring_ascii_case(name))
+        if (user_agent.key.equals_ignoring_ascii_case(spaced))
             return user_agent.key;
     }
 

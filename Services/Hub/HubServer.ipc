@@ -130,6 +130,7 @@ endpoint HubServer
     initialize() => (Hub::InitialState state)
     create_view(Hub::NewViewRequest request) => (u64 view_id, Hub::ViewState state)
     view_description(u64 view_id) => (Hub::ViewState state)
+    view_action_clicked(u64 view_id) =|
     ui_did_start() =|
     add_web_ui_page(String host, String title) =|
     send_web_ui_message(u64 web_ui_id, String name, JsonValue data) =|

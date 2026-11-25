@@ -651,6 +651,12 @@ Messages::HubServer::ViewDescriptionResponse ConnectionFromUI::view_description(
     return { view->current_state() };
 }
 
+void ConnectionFromUI::view_action_clicked(u64 view_id)
+{
+    if (auto* view = find_view(view_id))
+        view->did_click_action();
+}
+
 void ConnectionFromUI::crash_reports_changed()
 {
     async_crash_reports_changed();

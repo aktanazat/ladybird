@@ -507,6 +507,11 @@ void View::forward_callbacks_to_ui(bool is_tab)
             ui->async_view_move_to_window(view_id(), os_window_id, background);
     };
 
+    on_set_action = [this](String const& title, String const& badge) {
+        if (auto* ui = ConnectionFromUI::the())
+            ui->async_view_set_action(view_id(), title, badge);
+    };
+
     on_reposition_window = [this](auto const&... arguments) {
         if (auto* ui = ConnectionFromUI::the()) {
             push_state_to_ui();

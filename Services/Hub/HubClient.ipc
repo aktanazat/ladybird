@@ -329,6 +329,7 @@ endpoint HubClient
     view_request_dictionary_lookup(u64 view_id, WebView::DictionaryLookup lookup, Gfx::IntPoint position) =|
     view_open_new_view(u64 view_id, u64 new_view_id, Hub::ViewState new_view_state, Web::HTML::ActivateTab activate_tab, Web::HTML::WebViewHints hints) =|
     view_move_to_window(u64 view_id, Optional<u64> os_window_id, bool background) =|
+    view_set_action(u64 view_id, String title, String badge) =|
     view_update_zoom(u64 view_id) =|
     view_navigation_load_start(u64 view_id, URL::URL url) =|
     view_navigation_load_finish(u64 view_id, URL::URL url) =|

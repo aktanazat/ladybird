@@ -60,6 +60,7 @@ private:
     virtual Messages::HubServer::InitializeResponse initialize() override;
     virtual Messages::HubServer::CreateViewResponse create_view(Hub::NewViewRequest request) override;
     virtual Messages::HubServer::ViewDescriptionResponse view_description(u64 view_id) override;
+    virtual void view_action_clicked(u64 view_id) override;
     virtual void ui_did_start() override;
     virtual void add_web_ui_page(String host, String title) override;
     virtual void send_web_ui_message(u64 web_ui_id, String name, JsonValue data) override;

@@ -4289,6 +4289,12 @@ void ViewImplementation::prepare_page_for_navigable(WebContentPage& page)
         send_screen_rects_to_page(page, *screens);
 }
 
+void ViewImplementation::did_click_action() const
+{
+    if (auto* webdriver_bidi = WebDriverBiDi::the())
+        webdriver_bidi->action_clicked(*this);
+}
+
 void ViewImplementation::announce_to_webdriver()
 {
     // A tab without its handle yet announces itself once it gets one; picture-in-picture windows are not WebDriver's.

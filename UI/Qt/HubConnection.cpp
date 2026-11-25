@@ -15,6 +15,7 @@
 #include <UI/Qt/HubConnection.h>
 #include <UI/Qt/RemoteDownloads.h>
 #include <UI/Qt/RemoteView.h>
+#include <UI/Qt/StringUtils.h>
 #include <UI/Qt/Tab.h>
 #include <UI/Qt/WebUIPage.h>
 
@@ -234,6 +235,18 @@ void HubConnection::view_move_to_window(u64 view_id, Optional<u64> os_window_id,
     if (!background) {
         window.activateWindow();
         window.raise();
+    }
+}
+
+void HubConnection::view_set_action(u64 view_id, String title, String badge)
+{
+    for (auto* widget : QApplication::topLevelWidgets()) {
+        if (auto* window = as_if<BrowserWindow>(widget)) {
+            window->for_each_tab([&](Tab& tab) {
+                if (tab.view().view_id() == view_id)
+                    tab.set_action(qstring_from_ak_string(title), qstring_from_ak_string(badge));
+            });
+        }
     }
 }
 

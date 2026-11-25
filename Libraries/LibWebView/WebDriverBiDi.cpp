@@ -127,6 +127,13 @@ WebDriverBiDi::~WebDriverBiDi()
 {
     s_the = nullptr;
 
+    // NB: The toolbar button goes with the session that showed it.
+    ViewImplementation::for_each_view([](ViewImplementation& view) {
+        if (!view.owner_view_id().has_value() && view.on_set_action)
+            view.on_set_action({}, {});
+        return IterationDecision::Continue;
+    });
+
     // NB: A create that never completed leaves no window for a page to open without the user's input.
     for (auto const& [open_id, view_id] : m_pending_opens) {
         if (auto view = ViewImplementation::find_view_by_id(view_id); view.has_value())
@@ -534,6 +541,9 @@ void WebDriverBiDi::navigable_created(CanonicalNavigable const& navigable, Optio
 
 void WebDriverBiDi::top_level_traversable_did_get_window_handle(CanonicalTraversable const& traversable)
 {
+    if (auto view = traversable.view(); view.has_value())
+        show_action(*view);
+
     if (!is_event_enabled("browsingContext.contextCreated"sv))
         return;
 
@@ -1160,6 +1170,8 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
 
     if (method == "ladybird:moveTab"sv)
         return ladybird_move_tab(params, move(on_complete));
+    if (method == "ladybird:setAction"sv)
+        return ladybird_set_action(params, move(on_complete));
     if (method == "browser.getClientWindows"sv)
         return browser_get_client_windows(move(on_complete));
     if (method == "storage.getCookies"sv)
@@ -1286,6 +1298,57 @@ void WebDriverBiDi::start_next_tab_move(u64 view_id)
     }
     auto next = waiting->value.take_first();
     next();
+}
+
+// ladybird:setAction { context?, title?, badge? }: the toolbar button a tab shows, with the title as its tooltip and
+// the badge as its text, as a WebExtension's action does: what a context names is that tab's own, else every tab's.
+// A tab shows the button while its title is not empty; the button goes when the session ends.
+void WebDriverBiDi::ladybird_set_action(JsonObject const& params, CommandResult on_complete)
+{
+    auto context = TRY_OR_COMPLETE(get_optional_string(params, "context"sv));
+    auto title = TRY_OR_COMPLETE(get_optional_string(params, "title"sv));
+    auto badge = TRY_OR_COMPLETE(get_optional_string(params, "badge"sv));
+
+    auto apply = [&](Action& action) {
+        if (title.has_value())
+            action.title = title;
+        if (badge.has_value())
+            action.badge = badge;
+    };
+    if (context.has_value()) {
+        auto* traversable = TRY_OR_COMPLETE(get_a_top_level_traversable(*context));
+        auto view = traversable->view();
+        if (!view.has_value())
+            return on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::NoSuchFrame, "The browsing context has no tab"sv));
+        apply(m_view_actions.ensure(view->view_id()));
+        show_action(*view);
+    } else {
+        apply(m_default_action);
+        ViewImplementation::for_each_view([this](ViewImplementation& view) {
+            if (!view.owner_view_id().has_value())
+                show_action(view);
+            return IterationDecision::Continue;
+        });
+    }
+    on_complete(JsonValue {});
+}
+
+void WebDriverBiDi::show_action(ViewImplementation& view) const
+{
+    if (!view.on_set_action)
+        return;
+    auto own = m_view_actions.get(view.view_id()).value_or({});
+    view.on_set_action(own.title.value_or(m_default_action.title.value_or({})), own.badge.value_or(m_default_action.badge.value_or({})));
+}
+
+void WebDriverBiDi::action_clicked(ViewImplementation const& view)
+{
+    if (!view.has_traversable() || !is_event_enabled("ladybird:action.clicked"sv))
+        return;
+    auto id = navigable_id(view.traversable());
+    JsonObject params;
+    params.set("context"sv, id);
+    emit_event("ladybird:action.clicked"sv, move(params), { move(id) });
 }
 
 // Answers a ladybird:moveTab once its tab is where it was sent: in the client window named, or out of the one it was

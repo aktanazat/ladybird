@@ -100,6 +100,7 @@ public:
 
     void show_downloads_popover();
     void update_downloads_button();
+    void update_action_button();
     void update_feedback_button();
 
 private:
@@ -184,6 +185,8 @@ private:
     size_t m_completed_download_count { 0 };
 
     FeedbackButton* m_feedback_button { nullptr };
+    // The button an attached WebDriver BiDi session shows on the tab in front (Tab::action_title).
+    QToolButton* m_action_button { nullptr };
     QPointer<FeedbackPopover> m_feedback_popover;
 
     bool m_is_updating_chrome_style { false };

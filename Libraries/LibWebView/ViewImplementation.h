@@ -206,6 +206,8 @@ public:
     void prepare_page_for_tab(WebContentPage&);
     // Tells a WebDriver session that attached to the running browser of this tab, as a tab opened in a session is.
     void announce_to_webdriver();
+    // The user clicked the toolbar button a WebDriver BiDi session shows on this tab (on_set_action).
+    void did_click_action() const;
     // A WebDriver BiDi browsingContext.create opens its window from this view's page: that request, and no pop-up of
     // the page, passes the pop-up blocker, in a window of its own if new_window.
     void expect_webdriver_open(u64 open_id, bool new_window) { m_webdriver_opens.append({ open_id, new_window }); }
@@ -769,6 +771,9 @@ public:
     Function<void(Gfx::IntPoint)> on_reposition_window;
     // Moves the tab to the UI's OS window of this id, or to a new one, in front unless in the background.
     Function<void(Optional<u64> os_window_id, bool background)> on_move_to_window;
+    // Shows the toolbar button a WebDriver BiDi session asked for (ladybird:setAction) on this tab: its tooltip and
+    // the text on it; an empty title hides it.
+    Function<void(String const& title, String const& badge)> on_set_action;
     Function<void(Gfx::IntSize)> on_resize_window;
     Function<void()> on_maximize_window;
     Function<void()> on_minimize_window;

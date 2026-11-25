@@ -20,6 +20,7 @@
 #include <UI/Qt/DownloadPresentation.h>
 #include <UI/Qt/ElidedLabel.h>
 #include <UI/Qt/FeedbackPopover.h>
+#include <UI/Qt/HubConnection.h>
 #include <UI/Qt/Icon.h>
 #include <UI/Qt/LadybirdButton.h>
 #include <UI/Qt/LocationEdit.h>
@@ -1239,6 +1240,17 @@ WindowToolbar::WindowToolbar(WebView::IsPrivate is_private, QWidget* parent)
         });
     }
 
+    m_action_button = new QToolButton(m_toolbar);
+    m_action_button->setObjectName("LadybirdActionButton");
+    m_action_button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_action_button->setAutoRaise(true);
+    m_action_button->setFocusPolicy(Qt::NoFocus);
+    m_action_button->hide();
+    QObject::connect(m_action_button, &QToolButton::clicked, this, [this] {
+        if (m_tab)
+            HubConnection::the().async_view_action_clicked(m_tab->view().view_id());
+    });
+
     m_navigate_back_action.action().setEnabled(false);
     m_navigate_forward_action.action().setEnabled(false);
     // NB: The application's reload actions own the shortcuts, so the window and its View menu share one action for each.
@@ -1439,6 +1451,7 @@ void WindowToolbar::lay_out_as_row()
     toolbar_layout->addWidget(m_downloads_button, 0, Qt::AlignVCenter);
     if (m_feedback_button)
         toolbar_layout->addWidget(m_feedback_button, 0, Qt::AlignVCenter);
+    toolbar_layout->addWidget(m_action_button, 0, Qt::AlignVCenter);
     toolbar_layout->addWidget(m_trailing_sidebar_slot, 0, Qt::AlignVCenter);
     if (!m_window_controls_on_left) {
         toolbar_layout->addWidget(m_window_controls_separator, 0, Qt::AlignVCenter);
@@ -1477,6 +1490,7 @@ void WindowToolbar::lay_out_in_sidebar()
     footer_layout->addWidget(m_downloads_button, 0, Qt::AlignVCenter);
     if (m_feedback_button)
         footer_layout->addWidget(m_feedback_button, 0, Qt::AlignVCenter);
+    footer_layout->addWidget(m_action_button, 0, Qt::AlignVCenter);
     footer_layout->setContentsMargins(m_sidebar_footer_leading_room, 0, m_sidebar_inset, 0);
 
     layout()->setContentsMargins(0, 0, 0, 0);
@@ -1761,6 +1775,7 @@ void WindowToolbar::bind(Tab* tab)
     if (!tab || !tab->is_loaded()) {
         show_location_edit(nullptr);
         m_reload_button->show_loading_at_once(false);
+        update_action_button();
         if (tab)
             QObject::connect(tab, &Tab::loaded, this, [this, tab] { show_tab(*tab); }, Qt::SingleShotConnection);
         return;
@@ -1783,6 +1798,8 @@ void WindowToolbar::show_tab(Tab& tab)
     m_zoom_level_action.bind(tab.view().reset_zoom_action());
     m_reload_button->show_loading_at_once(tab.is_loading());
     m_performance_monitor->set_stats(tab.performance_stats());
+    QObject::connect(&tab, &Tab::action_changed, this, [this] { update_action_button(); });
+    update_action_button();
 
     QObject::connect(&tab, &Tab::loading_changed, this, [this] {
         m_reload_button->set_loading(m_tab->is_loading());
@@ -2041,6 +2058,18 @@ void WindowToolbar::recreate_icons()
     if (m_feedback_button)
         m_feedback_button->setIcon(create_chrome_icon(ChromeIcon::Feedback, Theme::chrome_palette(*this), activity, TOOLBAR_ICON_SIZE));
     update_window_control_icons();
+}
+
+void WindowToolbar::update_action_button()
+{
+    if (!m_tab || m_tab->action_title().isEmpty()) {
+        m_action_button->hide();
+        return;
+    }
+    m_action_button->setText(m_tab->action_badge().isEmpty() ? m_tab->action_title() : m_tab->action_badge());
+    m_action_button->setToolTip(m_tab->action_title());
+    m_action_button->setAccessibleName(m_tab->action_title());
+    m_action_button->show();
 }
 
 void WindowToolbar::update_downloads_button()

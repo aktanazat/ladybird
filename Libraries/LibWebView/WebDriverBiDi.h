@@ -62,6 +62,9 @@ public:
     void navigable_created(CanonicalNavigable const&, Optional<CanonicalNavigable const&> opener_navigable = {});
     void top_level_traversable_did_get_window_handle(CanonicalTraversable const&);
 
+    // The user clicked the toolbar button ladybird:setAction shows for this view.
+    void action_clicked(ViewImplementation const&);
+
     // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-navigable-destroyed
     void navigable_destroyed(CanonicalNavigable const&);
     void top_level_traversable_is_closing(CanonicalNavigable const&);
@@ -155,6 +158,8 @@ private:
     void browser_get_client_windows(CommandResult);
     void ladybird_move_tab(JsonObject const& params, CommandResult);
     static void answer_when_moved(WeakPtr<WebDriverBiDi>, u64 view_id, String context, Optional<u64> to, Optional<u64> from, CommandResult);
+    void ladybird_set_action(JsonObject const& params, CommandResult);
+    void show_action(ViewImplementation&) const;
     void start_next_tab_move(u64 view_id);
     void storage_get_cookies(JsonObject const& params, CommandResult);
     void storage_set_cookie(JsonObject const& params, CommandResult);
@@ -188,6 +193,13 @@ private:
     HashMap<u64, u64> m_pending_opens;
     // The views with a ladybird:moveTab running, each with the moves waiting for it.
     HashMap<u64, Vector<Function<void()>>> m_tab_moves;
+    // ladybird:setAction: the toolbar button every tab shows while the session lasts, and what a tab shows in its place.
+    struct Action {
+        Optional<String> title;
+        Optional<String> badge;
+    };
+    Action m_default_action;
+    HashMap<u64, Action> m_view_actions;
 
     // https://w3c.github.io/webdriver-bidi/#wait-queue
     struct Waiter {
