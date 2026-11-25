@@ -25,6 +25,25 @@ project(ladybird
     HOMEPAGE_URL "https://ladybird.org"
 )
 
+if (APPLE AND NOT IOS)
+    include(CheckLanguage)
+    list(LENGTH CMAKE_OSX_ARCHITECTURES ladybird_architecture_count)
+    if (ladybird_architecture_count LESS_EQUAL 1)
+        check_language(Swift)
+        if (CMAKE_Swift_COMPILER)
+            set(ladybird_swift_architecture "${CMAKE_SYSTEM_PROCESSOR}")
+            if (CMAKE_OSX_ARCHITECTURES)
+                set(ladybird_swift_architecture "${CMAKE_OSX_ARCHITECTURES}")
+            endif()
+            set(CMAKE_Swift_COMPILER_TARGET "${ladybird_swift_architecture}-apple-macosx${CMAKE_OSX_DEPLOYMENT_TARGET}")
+            enable_language(Swift)
+            # Preserve the C++ linker and its options for targets that link Swift libraries.
+            set(CMAKE_Swift_LINKER_PREFERENCE_PROPAGATES OFF)
+            set(LADYBIRD_HAS_SWIFT ON)
+        endif()
+    endif()
+endif()
+
 if (ANDROID OR IOS)
     set(BUILD_SHARED_LIBS OFF)
 endif()

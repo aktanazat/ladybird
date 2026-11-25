@@ -200,24 +200,12 @@ if (APPLE)
     # The Translation framework has no Objective-C API, so the browser reaches it through a small Swift library. The
     # API it uses came in the macOS 26.4 SDK, and CMake builds Swift for one architecture at a time. So a build with an
     # older SDK, or a universal build, leaves the translator out, and the browser doesn't offer to translate pages.
-    include(CheckLanguage)
-    check_language(Swift)
-    list(LENGTH CMAKE_OSX_ARCHITECTURES ladybird_architecture_count)
     set(ladybird_sdk "${CMAKE_OSX_SYSROOT}")
     if (NOT ladybird_sdk)
         set(ladybird_sdk macosx)
     endif()
     execute_process(COMMAND xcrun --sdk "${ladybird_sdk}" --show-sdk-version OUTPUT_VARIABLE ladybird_sdk_version OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    if (CMAKE_Swift_COMPILER AND ladybird_architecture_count LESS_EQUAL 1 AND ladybird_sdk_version VERSION_GREATER_EQUAL 26.4)
-        set(ladybird_swift_architecture "${CMAKE_SYSTEM_PROCESSOR}")
-        if (CMAKE_OSX_ARCHITECTURES)
-            set(ladybird_swift_architecture "${CMAKE_OSX_ARCHITECTURES}")
-        endif()
-        set(CMAKE_Swift_COMPILER_TARGET "${ladybird_swift_architecture}-apple-macosx${CMAKE_OSX_DEPLOYMENT_TARGET}")
-        enable_language(Swift)
-        # NB: Whatever links the library keeps linking as C++, so it keeps the link options that only apply to C and C++
-        #     links.
-        set(CMAKE_Swift_LINKER_PREFERENCE_PROPAGATES OFF)
+    if (LADYBIRD_HAS_SWIFT AND ladybird_sdk_version VERSION_GREATER_EQUAL 26.4)
         add_library(ladybird_translation_service STATIC TranslationServiceMac.swift)
         target_sources(ladybird_impl PRIVATE TranslatorMac.mm)
         target_link_libraries(ladybird_impl PRIVATE ladybird_translation_service "-framework NaturalLanguage")

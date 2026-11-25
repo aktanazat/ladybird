@@ -42,6 +42,7 @@ public:
     void push_state_to_ui();
 
     void did_get_answer(u64 answer_id, bool answer);
+    void did_get_webauthn_choice(u64 answer_id, Optional<u32>);
     void did_get_permission_answer(u64 answer_id, Web::Permissions::PromptOutcome);
 
     Gfx::IntSize screen_size() const;
@@ -96,6 +97,7 @@ private:
 
     // What the view waits to hear from the user, through the UI.
     HashMap<u64, Function<void(bool)>> m_pending_answers;
+    HashMap<u64, Function<void(Optional<u32>)>> m_pending_webauthn_choices;
     HashMap<u64, WebView::PermissionPromptCallback> m_pending_permission_answers;
     u64 m_next_answer_id { 1 };
 };

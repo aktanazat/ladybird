@@ -169,6 +169,12 @@ void View::did_get_answer(u64 answer_id, bool answer)
         (*on_answer)(answer);
 }
 
+void View::did_get_webauthn_choice(u64 answer_id, Optional<u32> choice)
+{
+    if (auto on_answer = m_pending_webauthn_choices.take(answer_id); on_answer.has_value())
+        (*on_answer)(choice);
+}
+
 void View::did_get_permission_answer(u64 answer_id, Web::Permissions::PromptOutcome outcome)
 {
     if (auto on_answer = m_pending_permission_answers.take(answer_id); on_answer.has_value())
@@ -213,6 +219,24 @@ void View::forward_callbacks_to_ui(bool is_tab)
 
     // NB: What the view does differs on whether it has these, so a view that the UI will not answer for must not.
     if (is_tab) {
+        on_choose_webauthn_credential = [this](String const& origin, Vector<String> const& names, Function<void(Optional<u32>)> on_complete) -> Function<void()> {
+            auto* ui = ConnectionFromUI::the();
+            if (!ui)
+                return {};
+            auto answer_id = m_next_answer_id++;
+            m_pending_webauthn_choices.set(answer_id, move(on_complete));
+            ui->async_view_choose_webauthn_credential(view_id(), answer_id, origin, names);
+            return [id = view_id(), answer_id] {
+                auto view = find_view_by_id(id);
+                if (!view.has_value())
+                    return;
+                auto& hub_view = static_cast<View&>(*view);
+                hub_view.m_pending_webauthn_choices.remove(answer_id);
+                if (auto* ui = ConnectionFromUI::the())
+                    ui->async_view_cancel_webauthn_chooser(id, answer_id);
+            };
+        };
+
         on_request_before_unload = [this](String const& source, Function<void(bool)> on_complete) {
             auto* ui = ConnectionFromUI::the();
             if (!ui) {

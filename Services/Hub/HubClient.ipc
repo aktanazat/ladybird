@@ -322,6 +322,8 @@ endpoint HubClient
     view_visited_page_title_change(u64 view_id, URL::URL url, String title) =|
     view_did_make_link_to_highlight(u64 view_id, Optional<URL::URL> url) =|
     view_favicon_change(u64 view_id, Optional<Gfx::ShareableBitmap> favicon) =|
+    view_choose_webauthn_credential(u64 view_id, u64 answer_id, String origin, Vector<String> names) =|
+    view_cancel_webauthn_chooser(u64 view_id, u64 answer_id) =|
     view_request_before_unload(u64 view_id, u64 answer_id, String source) =|
     view_request_external_url_confirmation(u64 view_id, u64 answer_id, URL::URL url, URL::Origin initiator_origin, String application_name) =|
     view_request_permission(u64 view_id, u64 answer_id, WebView::PermissionPromptRequest request) =|

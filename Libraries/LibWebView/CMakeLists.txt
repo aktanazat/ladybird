@@ -57,6 +57,7 @@ set(SOURCES
     PictureInPictureManager.cpp
     PictureInPictureWindow.cpp
     PermissionManager.cpp
+    PlatformAuthenticator.cpp
     PlatformFeatureDecisions.cpp
     Process.cpp
     ProcessManager.cpp
@@ -201,6 +202,12 @@ endif()
 
 if (LINUX OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
     target_link_libraries(LibWebView PRIVATE PkgConfig::DBUS)
+endif()
+
+if (LADYBIRD_HAS_SWIFT)
+    add_library(ladybird_secure_enclave STATIC WebAuthenticationMac.swift)
+    target_link_libraries(LibWebView PRIVATE ladybird_secure_enclave "-framework CryptoKit" "-framework LocalAuthentication" "-framework Security")
+    target_compile_definitions(LibWebView PRIVATE LADYBIRD_HAS_SECURE_ENCLAVE)
 endif()
 
 # Third-party

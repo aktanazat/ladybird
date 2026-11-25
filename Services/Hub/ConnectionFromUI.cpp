@@ -154,6 +154,12 @@ void ConnectionFromUI::view_answer(u64 view_id, u64 answer_id, bool answer)
     }
 }
 
+void ConnectionFromUI::view_answer_webauthn_chooser(u64 view_id, u64 answer_id, Optional<u32> choice)
+{
+    if (auto* view = find_view(view_id))
+        view->did_get_webauthn_choice(answer_id, choice);
+}
+
 void ConnectionFromUI::view_answer_permission_request(u64 view_id, u64 answer_id, Web::Permissions::PromptOutcome outcome)
 {
     if (auto* view = find_view(view_id)) {

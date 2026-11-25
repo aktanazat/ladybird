@@ -284,6 +284,8 @@ private:
     QPointer<QColorDialog> m_color_picker_dialog;
     QPointer<QDialog> m_date_picker_dialog;
     QPointer<QFileDialog> m_file_picker_dialog;
+    QPointer<QDialog> m_webauthn_chooser;
+    u64 m_webauthn_chooser_id { 0 };
     QPointer<QMessageBox> m_external_url_confirmation_dialog;
     PermissionPromptQueue m_permission_prompts;
 

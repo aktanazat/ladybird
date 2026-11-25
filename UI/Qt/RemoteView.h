@@ -386,6 +386,8 @@ public:
     decltype(Hub::View::on_leave_tooltip_area) on_leave_tooltip_area;
     decltype(Hub::View::on_content_blocking_change) on_content_blocking_change;
     decltype(Hub::View::on_request_alert) on_request_alert;
+    Function<void(u64 answer_id, String const& origin, Vector<String> const& names, Function<void(Optional<u32>)>)> on_choose_webauthn_credential;
+    Function<void(u64 answer_id)> on_cancel_webauthn_chooser;
     decltype(Hub::View::on_request_before_unload) on_request_before_unload;
     decltype(Hub::View::on_request_confirm) on_request_confirm;
     decltype(Hub::View::on_request_prompt) on_request_prompt;

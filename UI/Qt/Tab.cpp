@@ -55,6 +55,7 @@
 #include <QHBoxLayout>
 #include <QImage>
 #include <QLocale>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
@@ -431,6 +432,44 @@ void Tab::initialize(Optional<u64> hub_view_id)
         hide_hover_label();
         m_javascript_dialog->set_title_icon(tab_icon());
         m_javascript_dialog->show_alert(javascript_dialog_title(), qstring_from_utf16_string(message), offer_to_block_further_dialogs());
+    };
+
+    view().on_choose_webauthn_credential = [this](u64 answer_id, String const& origin, Vector<String> const& names, auto on_complete) {
+        if (m_webauthn_chooser || m_javascript_dialog->is_open() || m_external_url_confirmation_dialog) {
+            on_complete({});
+            return;
+        }
+
+        auto* dialog = new QDialog(&view());
+        m_webauthn_chooser = dialog;
+        m_webauthn_chooser_id = answer_id;
+        dialog->setWindowTitle("Choose a passkey");
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        auto* layout = new QVBoxLayout(dialog);
+        auto* site = new QLabel(qstring_from_ak_string(origin), dialog);
+        site->setTextFormat(Qt::PlainText);
+        layout->addWidget(site);
+        auto* accounts = new QListWidget(dialog);
+        for (auto const& name : names)
+            accounts->addItem(qstring_from_ak_string(name));
+        accounts->setCurrentRow(0);
+        layout->addWidget(accounts);
+
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+        buttons->button(QDialogButtonBox::Ok)->setText("Continue");
+        layout->addWidget(buttons);
+        QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+        QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+        QObject::connect(dialog, &QDialog::finished, this, [this, accounts, on_complete = AK::move(on_complete)](int result) {
+            m_webauthn_chooser = nullptr;
+            auto row = accounts->currentRow();
+            on_complete(result == QDialog::Accepted && row >= 0 ? Optional<u32> { static_cast<u32>(row) } : Optional<u32> {});
+        });
+        dialog->open();
+    };
+    view().on_cancel_webauthn_chooser = [this](u64 answer_id) {
+        if (m_webauthn_chooser && m_webauthn_chooser_id == answer_id)
+            m_webauthn_chooser->reject();
     };
 
     view().on_request_before_unload = [this](auto const& source, auto on_complete) {

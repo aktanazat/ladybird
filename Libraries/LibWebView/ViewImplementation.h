@@ -729,6 +729,7 @@ public:
     Function<void(ContentBlockingSnapshot const&)> on_content_blocking_change;
     Function<void(Utf16String const& message)> on_request_alert;
     Function<void(String const& source, Function<void(bool)> on_complete)> on_request_before_unload;
+    Function<Function<void()>(String const& origin, Vector<String> const& names, Function<void(Optional<u32>)>)> on_choose_webauthn_credential;
     Function<void(Utf16String const& message)> on_request_confirm;
     Function<void(Utf16String const& message, Utf16String const& default_)> on_request_prompt;
     Function<void(Utf16String const& message)> on_request_set_prompt_text;

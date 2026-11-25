@@ -158,6 +158,8 @@ private:
     virtual void view_visited_page(u64 view_id, URL::URL url, Optional<String> title, WebView::HistoryVisitTransition transition) override;
     virtual void view_visited_page_title_change(u64 view_id, URL::URL url, String title) override;
     virtual void view_favicon_change(u64 view_id, Optional<Gfx::ShareableBitmap> favicon) override;
+    virtual void view_choose_webauthn_credential(u64 view_id, u64 answer_id, String origin, Vector<String> names) override;
+    virtual void view_cancel_webauthn_chooser(u64 view_id, u64 answer_id) override;
     virtual void view_request_before_unload(u64 view_id, u64 answer_id, String source) override;
     virtual void view_request_external_url_confirmation(u64 view_id, u64 answer_id, URL::URL url, URL::Origin initiator_origin, String application_name) override;
     virtual void view_request_permission(u64 view_id, u64 answer_id, WebView::PermissionPromptRequest request) override;

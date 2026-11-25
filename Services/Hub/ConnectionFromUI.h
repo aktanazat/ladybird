@@ -160,6 +160,7 @@ private:
     virtual void answer_download_path(u64 request_id, Optional<ByteString> path) override;
     virtual void update_settings(u64 change_id, ByteString changes_json) override;
     virtual void view_answer(u64 view_id, u64 answer_id, bool answer) override;
+    virtual void view_answer_webauthn_chooser(u64 view_id, u64 answer_id, Optional<u32> choice) override;
     virtual void view_answer_permission_request(u64 view_id, u64 answer_id, Web::Permissions::PromptOutcome outcome) override;
     virtual void destroy_view(u64 view_id) override;
     virtual void view_set_viewport(u64 view_id, Web::DevicePixelSize size, double device_pixel_ratio) override;

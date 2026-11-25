@@ -275,6 +275,25 @@ void HubConnection::view_favicon_change(u64 view_id, Optional<Gfx::ShareableBitm
         view->on_favicon_change({});
 }
 
+void HubConnection::view_choose_webauthn_credential(u64 view_id, u64 answer_id, String origin, Vector<String> names)
+{
+    auto* view = RemoteView::find(view_id);
+    if (!view || !view->on_choose_webauthn_credential) {
+        async_view_answer_webauthn_chooser(view_id, answer_id, {});
+        return;
+    }
+    view->on_choose_webauthn_credential(answer_id, origin, names, [view_id, answer_id](Optional<u32> choice) {
+        if (auto* hub = HubConnection::the_if_connected())
+            hub->async_view_answer_webauthn_chooser(view_id, answer_id, choice);
+    });
+}
+
+void HubConnection::view_cancel_webauthn_chooser(u64 view_id, u64 answer_id)
+{
+    if (auto* view = RemoteView::find(view_id); view && view->on_cancel_webauthn_chooser)
+        view->on_cancel_webauthn_chooser(answer_id);
+}
+
 void HubConnection::view_request_before_unload(u64 view_id, u64 answer_id, String source)
 {
     auto* view = RemoteView::find(view_id);

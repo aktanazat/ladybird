@@ -61,6 +61,10 @@ struct AK::Traits<WebView::OwedReply> : public DefaultTraits<WebView::OwedReply>
 
 namespace WebView {
 
+namespace WebAuthentication {
+class PlatformOperation;
+}
+
 class WEBVIEW_API WebContentPage final
     : public RefCounted<WebContentPage>
     , public WebContentClientPageStub
@@ -463,6 +467,8 @@ private:
     HashTable<u64> m_renderer_owned_downloads;
     HashTable<OwedReply> m_owed_replies;
     Optional<MonotonicTime> m_last_user_activation;
+    RefPtr<WebAuthentication::PlatformOperation> m_platform_webauthn;
+    u64 m_platform_webauthn_request_id { 0 };
 
     // The grants a file: page's documents got, which have no origin to be kept for.
     struct FilePermissionGrant {

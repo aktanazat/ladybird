@@ -35,6 +35,7 @@
 #include <LibWebView/PageTranslation.h>
 #include <LibWebView/PermissionManager.h>
 #include <LibWebView/PictureInPictureManager.h>
+#include <LibWebView/PlatformAuthenticator.h>
 #include <LibWebView/RecordingNotificationBackend.h>
 #include <LibWebView/RequestServerManager.h>
 #include <LibWebView/StorageAreaRegistry.h>
@@ -668,6 +669,8 @@ void WebContentPage::close()
     PictureInPictureManager::the().close_window(*this);
     NotificationManager::the().page_did_close(*this);
     m_is_open = false;
+    if (auto operation = move(m_platform_webauthn))
+        operation->cancel();
     // NB: The process can outlive the page, for the shared workers it runs, or for other pages.
     if (m_client) {
         WorkerAgentManager::the().remove_web_content_page_owner(*m_client, m_id);
@@ -1949,10 +1952,18 @@ void WebContentPage::did_request_webauthn(u64 request_id, Web::HTML::CrossProces
         return fail("SecurityError"sv, "WebAuthn requires a non-opaque origin"sv);
 
     auto* authenticators = Application::the().virtual_authenticators();
+    auto tab_view = traversable().view();
+    auto has_platform_authenticator = [&] {
+        return tab_view.has_value() && tab_view->on_choose_webauthn_credential
+            && tab_view->is_private() == IsPrivate::No && Auth::PlatformOperation::is_available();
+    };
     auto operation = parameters.get_string("operation"sv);
     if (operation == "availability"sv) {
         JsonObject result;
-        result.set("available"sv, authenticators && authenticators->has_user_verifying_platform_authenticator());
+        auto available = authenticators && !authenticators->is_empty()
+            ? authenticators->has_user_verifying_platform_authenticator()
+            : has_platform_authenticator();
+        result.set("available"sv, available);
         async_webauthn_completed(request_id, JsonValue { move(result) });
         return;
     }
@@ -2018,11 +2029,48 @@ void WebContentPage::did_request_webauthn(u64 request_id, Web::HTML::CrossProces
         async_webauthn_completed(request_id, JsonValue { authenticators->perform(request) });
         return;
     }
-    fail("NotAllowedError"sv, "No platform authenticator is available"sv);
+    if (!has_platform_authenticator() || request.attachment == Auth::Attachment::CrossPlatform)
+        return fail("NotAllowedError"sv, "No compatible platform authenticator is available"sv);
+    if (traversable().system_visibility_state() == Web::HTML::VisibilityState::Hidden)
+        return fail("NotAllowedError"sv, "The requesting tab is hidden"sv);
+    if (m_platform_webauthn)
+        return fail("NotAllowedError"sv, "A platform passkey operation is already in progress"sv);
+
+    auto weak_client = m_client;
+    auto page_id = id();
+    auto current_page = [weak_client, page_id]() -> WebContentPage* {
+        if (weak_client)
+            return weak_client->page(page_id);
+        return nullptr;
+    };
+    auto is_current = [current_page, navigable_id = navigable->id(), document_id] {
+        auto* page = current_page();
+        if (!page || !page->has_traversable())
+            return false;
+        auto current = page->hosted_navigable(navigable_id);
+        return current.has_value() && page->hosts_active_document_of(*current)
+            && current->active_document().id() == document_id && current->active_document().unload_counter() == 0;
+    };
+    auto on_complete = [current_page, request_id](JsonObject response) {
+        auto* page = current_page();
+        if (!page)
+            return;
+        page->m_platform_webauthn = nullptr;
+        page->async_webauthn_completed(request_id, JsonValue { move(response) });
+    };
+
+    auto platform = adopt_ref(*new Auth::PlatformOperation(move(request), origin.serialize(), Application::profile().paths().data, move(is_current), move(on_complete)));
+    m_platform_webauthn_request_id = request_id;
+    m_platform_webauthn = platform;
+    platform->start(*tab_view);
 }
 
-void WebContentPage::did_cancel_webauthn(u64)
+void WebContentPage::did_cancel_webauthn(u64 request_id)
 {
+    if (m_platform_webauthn_request_id != request_id)
+        return;
+    if (auto operation = move(m_platform_webauthn))
+        operation->cancel();
 }
 
 void WebContentPage::did_request_permission(u64 request_id, Web::HTML::CrossProcessId document_id, Utf16String name)
