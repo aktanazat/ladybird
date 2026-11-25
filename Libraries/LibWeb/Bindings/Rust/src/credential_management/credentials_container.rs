@@ -98,7 +98,18 @@ impl CredentialsContainer {
         options: CredentialCreationOptions<'_>,
     ) -> WebIdlResult<()> {
         if let Some(public_key) = options.public_key {
-            if let Err(error) = public_key_credential::register(cx, promise, public_key, options.signal) {
+            let result = if matches!(
+                options.mediation,
+                CredentialMediationRequirement::Silent | CredentialMediationRequirement::Conditional
+            ) {
+                Err(Exception::Dom(
+                    "NotAllowedError",
+                    ak::Utf16String::from_ascii(b"WebAuthn requires interactive mediation"),
+                ))
+            } else {
+                public_key_credential::register(cx, promise, public_key, options.signal)
+            };
+            if let Err(error) = result {
                 reject_promise_with_exception(cx.vm(), promise, error);
             }
             return Ok(());
