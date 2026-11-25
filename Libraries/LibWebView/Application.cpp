@@ -630,7 +630,11 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
 
     if (webdriver_browser_endpoint.has_value())
         m_browser_options.webdriver_browser_endpoint = *webdriver_browser_endpoint;
-    // NB: A launch asked to attach WebDriver becomes the user's browser when none runs on the profile yet.
+    // NB: A launch asked to attach WebDriver becomes the user's browser when none runs on the profile yet. An app the
+    //     user installed to be driven sets LADYBIRD_ALLOW_WEBDRIVER_ATTACH=1 in its Info.plist LSEnvironment, so the
+    //     Dock, Finder and links opened from other apps launch it attachable too.
+    if (Core::Environment::get("LADYBIRD_ALLOW_WEBDRIVER_ATTACH"sv) == "1"sv)
+        allow_webdriver_attach = true;
     m_browser_options.allow_webdriver_attach = !webdriver_browser_endpoint.has_value() && (allow_webdriver_attach || webdriver_attach_endpoint.has_value());
     if (webdriver_attach_endpoint.has_value())
         m_browser_options.webdriver_attach_endpoint = *webdriver_attach_endpoint;
