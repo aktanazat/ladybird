@@ -235,10 +235,15 @@ public:
 
     void set_window_position(Gfx::IntPoint);
     void set_window_size(Gfx::IntSize);
+    // Runs once the UI next reports where the window is or how large, as it does after moving or resizing it as a
+    // page asked, or after a second if it reports nothing (the window did not change).
+    void after_window_geometry_report(Function<void()>);
     Optional<Gfx::IntPoint> window_position() const { return m_window_position; }
     Optional<Gfx::IntSize> window_size() const { return m_window_size; }
     // The UI's OS window that shows this tab, which WebDriver BiDi names as the tab's client window.
-    void set_os_window(u64 os_window_id) { m_os_window_id = os_window_id; }
+    void set_os_window(u64 os_window_id);
+    // Runs once the UI says the tab is in another OS window, or after a second if it says nothing.
+    void after_os_window_change(Function<void()>);
     Optional<u64> os_window_id() const { return m_os_window_id; }
     void set_system_visibility_state(Web::HTML::VisibilityState);
 
@@ -754,6 +759,8 @@ public:
     Function<void(i32 count_waiting)> on_resource_status_change;
     Function<void()> on_restore_window;
     Function<void(Gfx::IntPoint)> on_reposition_window;
+    // Moves the tab to the UI's OS window of this id, or to a new one, in front unless in the background.
+    Function<void(Optional<u64> os_window_id, bool background)> on_move_to_window;
     Function<void(Gfx::IntSize)> on_resize_window;
     Function<void()> on_maximize_window;
     Function<void()> on_minimize_window;
@@ -846,6 +853,7 @@ public:
 protected:
     virtual void did_request_context_menu(ContextMenuRequest) { }
     virtual void did_make_link_to_highlight(Optional<URL::URL>) { }
+    void run_window_geometry_waiters();
 
     void will_apply_history_traversal_step(Web::HTML::CrossProcessId operation_id);
     void did_apply_top_level_history_traversal_step(Web::HTML::CrossProcessId operation_id);
@@ -1155,6 +1163,10 @@ protected:
     Optional<Gfx::IntPoint> m_window_position;
     Optional<Gfx::IntSize> m_window_size;
     Optional<u64> m_os_window_id;
+    Vector<Function<void()>> m_window_geometry_waiters;
+    RefPtr<Core::Timer> m_window_geometry_timer;
+    Vector<Function<void()>> m_os_window_waiters;
+    RefPtr<Core::Timer> m_os_window_timer;
     struct WebDriverOpen {
         u64 id { 0 };
         bool new_window { false };

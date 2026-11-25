@@ -502,6 +502,11 @@ void View::forward_callbacks_to_ui(bool is_tab)
         }
     };
 
+    on_move_to_window = [this](Optional<u64> os_window_id, bool background) {
+        if (auto* ui = ConnectionFromUI::the())
+            ui->async_view_move_to_window(view_id(), os_window_id, background);
+    };
+
     on_reposition_window = [this](auto const&... arguments) {
         if (auto* ui = ConnectionFromUI::the()) {
             push_state_to_ui();

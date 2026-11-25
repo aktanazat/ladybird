@@ -615,6 +615,7 @@ void ViewImplementation::set_window_position(Gfx::IntPoint position)
     traversable().for_each_hosting_page([&](WebContentPage& page) {
         page.async_set_window_position(position.to_type<Web::DevicePixels>());
     });
+    run_window_geometry_waiters();
 }
 
 void ViewImplementation::set_window_size(Gfx::IntSize size)
@@ -623,6 +624,47 @@ void ViewImplementation::set_window_size(Gfx::IntSize size)
     traversable().for_each_hosting_page([&](WebContentPage& page) {
         page.async_set_window_size(size.to_type<Web::DevicePixels>());
     });
+    run_window_geometry_waiters();
+}
+
+void ViewImplementation::after_window_geometry_report(Function<void()> waiter)
+{
+    m_window_geometry_waiters.append(move(waiter));
+    if (!m_window_geometry_timer)
+        m_window_geometry_timer = Core::Timer::create_single_shot(AK::Duration::from_milliseconds(1000), [this] { run_window_geometry_waiters(); });
+    m_window_geometry_timer->restart();
+}
+
+void ViewImplementation::run_window_geometry_waiters()
+{
+    if (m_window_geometry_timer)
+        m_window_geometry_timer->stop();
+    for (auto& waiter : exchange(m_window_geometry_waiters, {}))
+        waiter();
+}
+
+void ViewImplementation::set_os_window(u64 os_window_id)
+{
+    auto changed = m_os_window_id != os_window_id;
+    m_os_window_id = os_window_id;
+    if (!changed)
+        return;
+    if (m_os_window_timer)
+        m_os_window_timer->stop();
+    for (auto& waiter : exchange(m_os_window_waiters, {}))
+        waiter();
+}
+
+void ViewImplementation::after_os_window_change(Function<void()> waiter)
+{
+    m_os_window_waiters.append(move(waiter));
+    if (!m_os_window_timer) {
+        m_os_window_timer = Core::Timer::create_single_shot(AK::Duration::from_milliseconds(1000), [this] {
+            for (auto& waiter : exchange(m_os_window_waiters, {}))
+                waiter();
+        });
+    }
+    m_os_window_timer->restart();
 }
 
 void ViewImplementation::set_system_visibility_state(Web::HTML::VisibilityState visibility_state)

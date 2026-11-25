@@ -274,6 +274,9 @@ public:
     void update_webdriver_session_config(Badge<WebDriverBrowserConnection>, Function<void(WebDriverSessionConfig&)> update);
     Optional<u64> webdriver_page_load_timeout() const;
     void complete_webdriver_content_command(u64 command_id, Web::WebDriver::Response);
+    // A classic WebDriver command a page runs goes there under an id of the browser's own, so one a session left
+    // running completes nothing in a session that attached after it.
+    u64 begin_webdriver_content_command(Badge<WebDriverBrowserConnection>, u64 session_command_id);
 
     Web::CompositorContextId allocate_compositor_context_id();
     ErrorOr<void> connect_web_content_to_compositor(WebContentClient&);
@@ -671,6 +674,9 @@ private:
     RefPtr<WebDriverBrowserConnection> m_webdriver_browser_connection;
     bool m_webdriver_browser_connection_failed { false };
     WebDriverSessionConfig m_webdriver_session_config;
+    // NB: Below the BiDi content command ids (WebDriverBiDi.cpp), above any a session numbers its commands with.
+    u64 m_next_classic_content_command_id { 1ull << 61 };
+    HashMap<u64, u64> m_classic_content_commands;
 
     OwnPtr<RequestServerManager> m_request_server_manager;
     OwnPtr<ImageDecoderManager> m_image_decoder_manager;

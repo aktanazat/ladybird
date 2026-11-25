@@ -164,6 +164,7 @@ private:
     virtual void view_request_date_picker(u64 view_id, Utf16String input_type, Utf16String value, Utf16String minimum, Utf16String maximum) override;
     virtual void view_request_dictionary_lookup(u64 view_id, WebView::DictionaryLookup lookup, Gfx::IntPoint position) override;
     virtual void view_open_new_view(u64 view_id, u64 new_view_id, Hub::ViewState new_view_state, Web::HTML::ActivateTab activate_tab, Web::HTML::WebViewHints hints) override;
+    virtual void view_move_to_window(u64 view_id, Optional<u64> os_window_id, bool background) override;
     virtual void view_update_zoom(u64 view_id) override;
     virtual void view_navigation_load_start(u64 view_id, URL::URL url) override;
     virtual void view_navigation_load_finish(u64 view_id, URL::URL url) override;

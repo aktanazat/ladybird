@@ -105,6 +105,8 @@ static constexpr auto s_command_names = to_array<StringView>({
     "storage.setCookie"sv,
     "webExtension.install"sv,
     "webExtension.uninstall"sv,
+    // https://w3c.github.io/webdriver-bidi/#protocol-definition: an extension command, named prefix:name.
+    "ladybird:moveTab"sv,
 });
 
 // https://w3c.github.io/webdriver-bidi/#module-name

@@ -1643,31 +1643,42 @@ void WebContentPage::did_request_restore_window()
         view().on_restore_window();
 }
 
+// NB: A window rect request completes once the UI has moved or resized the window, so the rect WebDriver reads next is
+//     the new one.
 void WebContentPage::did_request_reposition_window(Gfx::IntPoint position, u64 completion_id)
 {
     if (!may_change_window(*this, "did_request_reposition_window"sv))
         return;
-    if (view().on_reposition_window)
-        view().on_reposition_window(position);
-    async_did_complete_window_rect_request(completion_id);
+    if (!view().on_reposition_window || view().window_position() == position) {
+        async_did_complete_window_rect_request(completion_id);
+        return;
+    }
+    view().after_window_geometry_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
+    view().on_reposition_window(position);
 }
 
 void WebContentPage::did_request_resize_window(Gfx::IntSize size, u64 completion_id)
 {
     if (!may_change_window(*this, "did_request_resize_window"sv))
         return;
-    if (view().on_resize_window)
-        view().on_resize_window(size);
-    async_did_complete_window_rect_request(completion_id);
+    if (!view().on_resize_window || view().window_size() == size) {
+        async_did_complete_window_rect_request(completion_id);
+        return;
+    }
+    view().after_window_geometry_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
+    view().on_resize_window(size);
 }
 
 void WebContentPage::did_request_maximize_window(u64 completion_id)
 {
     if (!may_change_window(*this, "did_request_maximize_window"sv))
         return;
-    if (view().on_maximize_window)
-        view().on_maximize_window();
-    async_did_complete_window_rect_request(completion_id);
+    if (!view().on_maximize_window) {
+        async_did_complete_window_rect_request(completion_id);
+        return;
+    }
+    view().after_window_geometry_report([page = NonnullRefPtr { *this }, completion_id] { page->async_did_complete_window_rect_request(completion_id); });
+    view().on_maximize_window();
 }
 
 void WebContentPage::did_request_minimize_window()

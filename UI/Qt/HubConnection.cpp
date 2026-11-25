@@ -200,6 +200,43 @@ void HubConnection::view_open_new_view(u64 view_id, u64 new_view_id, Hub::ViewSt
         async_destroy_view(new_view_id);
 }
 
+// WebDriver BiDi's ladybird:moveTab: the tab goes to the end of the OS window it names, or to a new window, as dragging
+// it there or "Move to New Window" does.
+void HubConnection::view_move_to_window(u64 view_id, Optional<u64> os_window_id, bool background)
+{
+    BrowserWindow* source = nullptr;
+    BrowserWindow* target = nullptr;
+    Tab* moving = nullptr;
+    for (auto* widget : QApplication::topLevelWidgets()) {
+        auto* window = as_if<BrowserWindow>(widget);
+        if (!window)
+            continue;
+        if (os_window_id.has_value() && window->os_window_id() == *os_window_id)
+            target = window;
+        window->for_each_tab([&](Tab& tab) {
+            if (tab.view().view_id() == view_id) {
+                source = window;
+                moving = &tab;
+            }
+        });
+    }
+    if (!source || !moving || (os_window_id.has_value() && !target) || target == source)
+        return;
+
+    auto index = source->tab_index(moving);
+    if (target) {
+        source->move_tab_to_window(index, *target, target->tab_count());
+        return;
+    }
+    auto& window = Application::the().new_window({}, Application::the().configuration_for_new_window(), BrowserWindow::IsPopupWindow::No, source->is_private(), {}, ShowWindow::No);
+    source->move_tab_to_window(index, window, 0);
+    window.show();
+    if (!background) {
+        window.activateWindow();
+        window.raise();
+    }
+}
+
 void HubConnection::view_favicon_change(u64 view_id, Optional<Gfx::ShareableBitmap> favicon)
 {
     auto* view = RemoteView::find(view_id);

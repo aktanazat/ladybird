@@ -153,6 +153,7 @@ private:
     void route_to_navigable(String const& method, JsonObject const& params, CommandResult);
     String os_window_of(String const& top_level_traversable_id) const;
     void browser_get_client_windows(CommandResult);
+    void ladybird_move_tab(JsonObject const& params, CommandResult);
     void storage_get_cookies(JsonObject const& params, CommandResult);
     void storage_set_cookie(JsonObject const& params, CommandResult);
     void storage_delete_cookies(JsonObject const& params, CommandResult);

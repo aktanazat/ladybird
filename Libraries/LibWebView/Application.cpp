@@ -1370,6 +1370,7 @@ void Application::webdriver_browser_connection_died(Badge<WebDriverBrowserConnec
     // NB: A command still running for the old session holds the connection; its BiDi state goes now.
     if (m_webdriver_browser_connection)
         m_webdriver_browser_connection->retire();
+    m_classic_content_commands.clear();
     m_webdriver_browser_connection = nullptr;
     m_webdriver_browser_connection_failed = true;
     // A browser WebDriver attached to goes on as the user's browser, which a later session may attach to again.
@@ -1408,6 +1409,7 @@ void Application::detach_webdriver(Badge<WebDriverBrowserConnection>)
         //     attaching later starts with its own.
         if (m_webdriver_browser_connection)
             m_webdriver_browser_connection->retire();
+        m_classic_content_commands.clear();
         m_webdriver_browser_connection = nullptr;
         m_browser_options.webdriver_browser_endpoint.clear();
     });
@@ -1443,13 +1445,22 @@ Optional<u64> Application::webdriver_page_load_timeout() const
     return timeouts.page_load_timeout;
 }
 
+u64 Application::begin_webdriver_content_command(Badge<WebDriverBrowserConnection>, u64 session_command_id)
+{
+    auto command_id = m_next_classic_content_command_id++;
+    m_classic_content_commands.set(command_id, session_command_id);
+    return command_id;
+}
+
 void Application::complete_webdriver_content_command(u64 command_id, Web::WebDriver::Response response)
 {
     if (auto* webdriver_bidi = WebDriverBiDi::the(); webdriver_bidi && webdriver_bidi->did_complete_content_command(command_id, response))
         return;
 
-    if (m_webdriver_browser_connection)
-        m_webdriver_browser_connection->async_command_complete(command_id, move(response));
+    // NB: A command of a session that ended has no entry here any more.
+    auto session_command_id = m_classic_content_commands.take(command_id);
+    if (session_command_id.has_value() && m_webdriver_browser_connection)
+        m_webdriver_browser_connection->async_command_complete(*session_command_id, move(response));
 }
 
 void Application::reset_private_browsing_session()

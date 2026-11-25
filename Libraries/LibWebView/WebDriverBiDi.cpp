@@ -1158,6 +1158,8 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
         return;
     }
 
+    if (method == "ladybird:moveTab"sv)
+        return ladybird_move_tab(params, move(on_complete));
     if (method == "browser.getClientWindows"sv)
         return browser_get_client_windows(move(on_complete));
     if (method == "storage.getCookies"sv)
@@ -1207,6 +1209,60 @@ String WebDriverBiDi::os_window_of(String const& top_level_traversable_id) const
             return MUST(String::formatted("window-{}", *view->os_window_id()));
     }
     return m_tab_windows.get(top_level_traversable_id).value_or(top_level_traversable_id);
+}
+
+// ladybird:moveTab { context, clientWindow?, background? }: moves a top-level traversable's tab to the end of the client
+// window named, or to a new one (behind the user's window unless background is false), and answers its client window
+// once the UI has it there. Neither WebDriver nor BiDi can move a tab, which tabs.move and windows.create({tabId}) of
+// the WebExtensions API do.
+void WebDriverBiDi::ladybird_move_tab(JsonObject const& params, CommandResult on_complete)
+{
+    auto context = TRY_OR_COMPLETE(get_string(params, "context"sv));
+    auto* traversable = TRY_OR_COMPLETE(get_a_top_level_traversable(context));
+    auto view = traversable->view();
+    if (!view.has_value() || !view->on_move_to_window)
+        return on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnsupportedOperation, "This browser has no windows to move a tab between"sv));
+
+    Optional<u64> os_window_id;
+    if (auto client_window = TRY_OR_COMPLETE(get_optional_string(params, "clientWindow"sv)); client_window.has_value()) {
+        auto name = client_window->bytes_as_string_view();
+        auto id = name.starts_with("window-"sv) ? name.substring_view(7).to_number<u64>() : Optional<u64> {};
+        if (!id.has_value())
+            return on_complete(invalid_argument("Parameter 'clientWindow' must name a client window"sv));
+        os_window_id = *id;
+    }
+    auto background = TRY_OR_COMPLETE(get_optional_bool(params, "background"sv)).value_or(true);
+
+    if (os_window_id.has_value() && view->os_window_id() == os_window_id) {
+        JsonObject result;
+        result.set("clientWindow"sv, os_window_of(context));
+        return on_complete(JsonValue { move(result) });
+    }
+
+    // NB: The UI moves a tab it has placed in a window; one it has not placed yet moves once it has. The command
+    //     answers once the tab is in another window, and fails if a second passes with it where it was. A session
+    //     that ended meanwhile is answered nothing.
+    auto move_placed_tab = [weak_this = make_weak_ptr(), view_id = view->view_id(), context, os_window_id, background, on_complete = move(on_complete)]() mutable {
+        auto view = ViewImplementation::find_view_by_id(view_id);
+        if (!weak_this || !view.has_value())
+            return;
+        auto from = view->os_window_id();
+        view->after_os_window_change([weak_this, view_id, context, from, on_complete = move(on_complete)]() mutable {
+            auto view = ViewImplementation::find_view_by_id(view_id);
+            if (!weak_this)
+                return;
+            if (!view.has_value() || view->os_window_id() == from)
+                return on_complete(Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnknownError, "The tab did not move"sv));
+            JsonObject result;
+            result.set("clientWindow"sv, weak_this->os_window_of(context));
+            on_complete(JsonValue { move(result) });
+        });
+        view->on_move_to_window(os_window_id, background);
+    };
+    if (view->os_window_id().has_value())
+        move_placed_tab();
+    else
+        view->after_os_window_change(move(move_placed_tab));
 }
 
 // https://w3c.github.io/webdriver-bidi/#command-browser-getClientWindows

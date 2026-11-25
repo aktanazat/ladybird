@@ -188,7 +188,8 @@ void WebDriverBrowserConnection::run_content_command(u64 command_id, String wind
         return;
     }
 
-    view->run_webdriver_content_command(command_id, browsing_context, name, move(payload), move(arguments));
+    auto content_command_id = Application::the().begin_webdriver_content_command({}, command_id);
+    view->run_webdriver_content_command(content_command_id, browsing_context, name, move(payload), move(arguments));
 }
 
 // 11.3 Switch to Window, https://w3c.github.io/webdriver/#dfn-switch-to-window
