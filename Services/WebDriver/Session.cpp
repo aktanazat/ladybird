@@ -208,6 +208,8 @@ ErrorOr<NonnullRefPtr<Session::NewSessionPromise>> Session::create(NonnullRefPtr
                          return;
                      }
 
+                     capabilities.set("webauthn:virtualAuthenticators"sv, true);
+
                      // 12. Append session to active sessions.
                      s_session_being_created = nullptr;
                      s_sessions.set(session->session_id(), session);
@@ -638,6 +640,13 @@ NonnullRefPtr<Session::WebDriverPromise> Session::load_url(URL::URL url)
 {
     return perform_browser_command([this, url = move(url)](u64 command_id) {
         m_browser_connection->async_load_url(command_id, m_current_window_handle, url);
+    });
+}
+
+NonnullRefPtr<Session::WebDriverPromise> Session::run_webauthn_command(String command, Vector<String> arguments, JsonValue payload)
+{
+    return perform_browser_command([this, command = move(command), arguments = move(arguments), payload = move(payload)](u64 command_id) mutable {
+        m_browser_connection->async_webauthn_command(command_id, command, arguments, payload);
     });
 }
 

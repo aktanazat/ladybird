@@ -133,6 +133,9 @@ public:
     // Permissions, https://w3c.github.io/permissions/#automation
     virtual ResponsePromise set_permission(Parameters parameters, JsonValue payload) = 0;
 
+    // https://www.w3.org/TR/webauthn-3/#sctn-automation
+    virtual ResponsePromise run_webauthn_command(StringView command, Parameters parameters, JsonValue payload) = 0;
+
     Function<void()> on_death;
 
 protected:

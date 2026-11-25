@@ -22,6 +22,8 @@ endpoint WebDriverBrowserClient {
     set_strict_file_interactability(bool strict_file_interactability) =|
     set_timeouts_configuration(JsonValue timeouts) =|
 
+    webauthn_command(u64 command_id, String command, Vector<String> arguments, JsonValue payload) =|
+
     // https://w3c.github.io/webdriver-bidi/
     bidi_command(u64 command_id, String method, JsonValue params) =|
     bidi_get_top_level_traversables(u64 command_id, Vector<String> navigable_ids) =|

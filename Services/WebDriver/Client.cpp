@@ -972,4 +972,11 @@ ResponsePromise Client::set_permission(Web::WebDriver::Parameters parameters, Js
     return session->set_permission(move(payload));
 }
 
+ResponsePromise Client::run_webauthn_command(StringView command, Web::WebDriver::Parameters parameters, JsonValue payload)
+{
+    auto session_id = parameters.take_first();
+    auto session = WEBDRIVER_TRY(Session::find_session(session_id, Web::WebDriver::SessionFlags::Http, Session::AllowInvalidWindowHandle::Yes));
+    return session->run_webauthn_command(MUST(String::from_utf8(command)), move(parameters), move(payload));
+}
+
 }

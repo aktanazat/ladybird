@@ -145,7 +145,11 @@ static ErrorOr<JsonObject, Error> validate_capabilities(JsonValue const& capabil
         }
 
         // -> name is the key of an extension capability
-        else if (name.contains(':')) {
+        else if (name == "webauthn:virtualAuthenticators"sv) {
+            if (!value.is_bool())
+                return Error::from_code(ErrorCode::InvalidArgument, "Capability webauthn:virtualAuthenticators must be a boolean"sv);
+            deserialized = value;
+        } else if (name.contains(':')) {
             // If name is known to the implementation, let deserialized be the result of trying to deserialize value in
             // an implementation-specific way. Otherwise, let deserialized be set to value.
             if (name.starts_with_bytes("ladybird:"sv))

@@ -99,6 +99,7 @@ private:
     virtual ResponsePromise take_element_screenshot(Web::WebDriver::Parameters parameters, JsonValue payload) override;
     virtual ResponsePromise print_page(Web::WebDriver::Parameters parameters, JsonValue payload) override;
     virtual ResponsePromise set_permission(Web::WebDriver::Parameters parameters, JsonValue payload) override;
+    virtual ResponsePromise run_webauthn_command(StringView command, Web::WebDriver::Parameters parameters, JsonValue payload) override;
 
     LaunchBrowserCallback m_launch_browser_callback;
 };

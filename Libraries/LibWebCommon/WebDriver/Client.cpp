@@ -49,6 +49,12 @@ struct MatchedRoute {
             }                                                     \
     }
 
+#define WEBAUTHN_ROUTE(method, path, command)                                                                                  \
+    Route { HTTP::HttpRequest::method, "/session/:session_id/webauthn/authenticator" path ""sv,                                 \
+        [](Client& client, Parameters parameters, JsonValue payload) {                                                         \
+            return client.run_webauthn_command(command ""sv, move(parameters), move(payload));                                  \
+        } }
+
 // https://w3c.github.io/webdriver/#dfn-endpoints
 static constexpr auto s_webdriver_endpoints = Array {
     ROUTE(POST, "/session"sv, new_session),
@@ -118,6 +124,13 @@ static constexpr auto s_webdriver_endpoints = Array {
     ROUTE(GET, "/session/:session_id/element/:element_id/screenshot"sv, take_element_screenshot),
     ROUTE(POST, "/session/:session_id/print"sv, print_page),
     ROUTE(POST, "/session/:session_id/permissions"sv, set_permission),
+    WEBAUTHN_ROUTE(POST, "", "addAuthenticator"),
+    WEBAUTHN_ROUTE(DELETE, "/:authenticator_id", "removeAuthenticator"),
+    WEBAUTHN_ROUTE(POST, "/:authenticator_id/credential", "addCredential"),
+    WEBAUTHN_ROUTE(GET, "/:authenticator_id/credentials", "getCredentials"),
+    WEBAUTHN_ROUTE(DELETE, "/:authenticator_id/credentials/:credential_id", "removeCredential"),
+    WEBAUTHN_ROUTE(DELETE, "/:authenticator_id/credentials", "removeAllCredentials"),
+    WEBAUTHN_ROUTE(POST, "/:authenticator_id/uv", "setUserVerified"),
 };
 
 // https://w3c.github.io/webdriver/#dfn-match-a-request

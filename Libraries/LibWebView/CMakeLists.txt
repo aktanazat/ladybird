@@ -88,6 +88,7 @@ set(SOURCES
     Utilities.cpp
     VideoDecoderServerControlClient.cpp
     ViewImplementation.cpp
+    WebAuthentication.cpp
     WebCompatReport.cpp
     WebContentClient.cpp
     WebContentPage.cpp

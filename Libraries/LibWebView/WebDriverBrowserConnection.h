@@ -9,6 +9,7 @@
 #include <AK/Error.h>
 #include <LibIPC/ConnectionToServer.h>
 #include <LibIPC/Transport.h>
+#include <LibWebView/WebAuthentication.h>
 #include <LibWebView/WebDriverBiDi.h>
 #include <WebDriver/WebDriverBrowserClientEndpoint.h>
 #include <WebDriver/WebDriverBrowserServerEndpoint.h>
@@ -23,6 +24,7 @@ public:
 
     // The session this connection served is over; a command of it that is still running finishes without BiDi state.
     void retire();
+    WebAuthentication::VirtualAuthenticators* virtual_authenticators() { return m_virtual_authenticators.ptr(); }
 
 private:
     explicit WebDriverBrowserConnection(NonnullOwnPtr<IPC::Transport>);
@@ -51,7 +53,10 @@ private:
     virtual void bidi_run_subscribe_steps(u64 command_id, String event_name, Vector<String> top_level_traversable_ids) override;
     virtual void set_bidi_enabled_events(Vector<String> event_names, HashMap<String, Optional<Vector<String>>> event_contexts) override;
 
+    virtual void webauthn_command(u64 command_id, String command, Vector<String> arguments, JsonValue payload) override;
+
     OwnPtr<WebDriverBiDi> m_webdriver_bidi;
+    OwnPtr<WebAuthentication::VirtualAuthenticators> m_virtual_authenticators;
 };
 
 }

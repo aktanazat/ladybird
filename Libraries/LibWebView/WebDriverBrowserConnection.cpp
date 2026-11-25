@@ -33,6 +33,7 @@ ErrorOr<NonnullRefPtr<WebDriverBrowserConnection>> WebDriverBrowserConnection::c
 WebDriverBrowserConnection::WebDriverBrowserConnection(NonnullOwnPtr<IPC::Transport> transport)
     : IPC::ConnectionToServer<WebDriverBrowserClientEndpoint, WebDriverBrowserServerEndpoint>(*this, move(transport))
     , m_webdriver_bidi(make<WebDriverBiDi>(*this))
+    , m_virtual_authenticators(make<WebAuthentication::VirtualAuthenticators>())
 {
 }
 
@@ -44,6 +45,14 @@ void WebDriverBrowserConnection::die()
 void WebDriverBrowserConnection::retire()
 {
     m_webdriver_bidi = nullptr;
+    m_virtual_authenticators = nullptr;
+}
+
+void WebDriverBrowserConnection::webauthn_command(u64 command_id, String command, Vector<String> arguments, JsonValue payload)
+{
+    if (!m_virtual_authenticators)
+        return;
+    async_command_complete(command_id, m_virtual_authenticators->run_command(command, arguments, payload));
 }
 
 void WebDriverBrowserConnection::close_session()
