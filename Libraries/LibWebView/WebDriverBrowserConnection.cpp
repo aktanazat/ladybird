@@ -43,6 +43,11 @@ void WebDriverBrowserConnection::die()
 
 void WebDriverBrowserConnection::close_session()
 {
+    // A session that attached to the user's browser leaves it running.
+    if (Application::browser_options().allow_webdriver_attach) {
+        Application::the().detach_webdriver({});
+        return;
+    }
     Core::EventLoop::current().quit(0);
 }
 

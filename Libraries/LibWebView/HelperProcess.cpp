@@ -370,6 +370,8 @@ ErrorOr<NonnullRefPtr<WebView::WebContentClient>> launch_web_content_process(Bro
         arguments.append("--expose-experimental-interfaces"sv);
     if (web_content_options.expose_internals_object == WebView::ExposeInternalsObject::Yes)
         arguments.append("--expose-internals-object"sv);
+    if (web_content_options.hide_webdriver == WebView::HideWebDriver::Yes)
+        arguments.append("--hide-webdriver"sv);
     if (web_content_options.collect_garbage_on_every_allocation == WebView::CollectGarbageOnEveryAllocation::Yes)
         arguments.append("--collect-garbage-on-every-allocation"sv);
     if (web_content_options.paint_viewport_scrollbars == PaintViewportScrollbars::No)

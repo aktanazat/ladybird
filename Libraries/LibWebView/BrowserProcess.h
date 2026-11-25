@@ -33,12 +33,14 @@ public:
 
     Function<void(Vector<URL::URL> const&)> on_new_tab;
     Function<void(Vector<URL::URL> const&)> on_new_window;
+    Function<void(ByteString const&)> on_attach_webdriver;
 
 private:
     UIProcessConnectionFromClient(NonnullOwnPtr<IPC::Transport>, int client_id);
 
     virtual void create_new_tab(Vector<ByteString> urls) override;
     virtual void create_new_window(Vector<ByteString> urls) override;
+    virtual void attach_webdriver(ByteString endpoint) override;
 };
 
 class WEBVIEW_API BrowserProcess {
@@ -76,6 +78,10 @@ public:
 
     Function<void(Vector<URL::URL> const&)> on_new_tab;
     Function<void(Vector<URL::URL> const&)> on_new_window;
+    Function<void(ByteString const&)> on_attach_webdriver;
+
+    // A launch that finds a browser running hands it this instead of its URLs.
+    void set_webdriver_attach_endpoint(ByteString endpoint) { m_webdriver_attach_endpoint = move(endpoint); }
 
 private:
     void accept_transport(NonnullOwnPtr<IPC::Transport>);
@@ -99,6 +105,7 @@ private:
     ByteString m_ui_pid_path;
     ByteString m_socket_path;
     int m_next_client_id { 0 };
+    Optional<ByteString> m_webdriver_attach_endpoint;
 };
 
 }

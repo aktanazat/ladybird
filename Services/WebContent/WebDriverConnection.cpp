@@ -220,7 +220,8 @@ static bool fire_an_event(Utf16FlyString const& name, Optional<Web::DOM::Element
 NonnullRefPtr<WebDriverConnection> WebDriverConnection::create(PageClient& page_client)
 {
     // Allow pop-ups, or otherwise /window/new won't be able to open a new tab.
-    page_client.page().set_should_block_pop_ups(false);
+    if (!s_hidden_from_pages)
+        page_client.page().set_should_block_pop_ups(false);
 
     return adopt_ref(*new WebDriverConnection(page_client));
 }
@@ -234,7 +235,8 @@ WebDriverConnection::WebDriverConnection(PageClient& page_client)
         if (connection->m_pending_window_rect_requests.remove(request_id) && connection->m_pending_window_rect_requests.is_empty())
             connection->driver_execution_complete(serialize_rect(rect.to_type<int>()));
     }));
-    page_client.page().set_is_webdriver_active(true);
+    if (!s_hidden_from_pages)
+        page_client.page().set_is_webdriver_active(true);
 }
 
 void WebDriverConnection::driver_execution_complete(Web::WebDriver::Response response)

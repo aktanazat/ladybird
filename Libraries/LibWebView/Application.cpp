@@ -344,6 +344,8 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
     Optional<StringView> profile_tool;
     Optional<StringView> profile_output;
     Optional<StringView> webdriver_browser_endpoint;
+    Optional<StringView> webdriver_attach_endpoint;
+    bool allow_webdriver_attach = false;
     Optional<StringView> user_agent_preset;
     Optional<StringView> dns_server_address;
     Optional<StringView> default_time_zone;
@@ -468,6 +470,8 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
 #else
     args_parser.add_option(webdriver_browser_endpoint, "Path to WebDriver IPC for the browser", "webdriver-browser-path", 0, "path", Core::ArgsParser::OptionHideMode::CommandLineAndMarkdown);
 #endif
+    args_parser.add_option(allow_webdriver_attach, "Let WebDriver attach to this browser later (WebDriver --attach)", "allow-webdriver-attach");
+    args_parser.add_option(webdriver_attach_endpoint, "Attach the browser running on this profile to WebDriver at this endpoint", "webdriver-attach", 0, "endpoint", Core::ArgsParser::OptionHideMode::CommandLineAndMarkdown);
     args_parser.add_option(enable_test_mode, "Enable test mode", "test-mode");
     args_parser.add_option(log_all_js_exceptions, "Log all JavaScript exceptions", "log-all-js-exceptions");
     args_parser.add_option(disable_http_memory_cache, "Disable HTTP memory cache", "disable-http-memory-cache");
@@ -626,6 +630,10 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
 
     if (webdriver_browser_endpoint.has_value())
         m_browser_options.webdriver_browser_endpoint = *webdriver_browser_endpoint;
+    // NB: A launch asked to attach WebDriver becomes the user's browser when none runs on the profile yet.
+    m_browser_options.allow_webdriver_attach = !webdriver_browser_endpoint.has_value() && (allow_webdriver_attach || webdriver_attach_endpoint.has_value());
+    if (webdriver_attach_endpoint.has_value())
+        m_browser_options.webdriver_attach_endpoint = *webdriver_attach_endpoint;
 
     auto http_disk_cache_mode = HTTPDiskCacheMode::Enabled;
     if (disable_http_disk_cache)
@@ -655,6 +663,7 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
         .file_scheme_urls_have_tuple_origins = file_scheme_urls_have_tuple_origins ? FileSchemeUrlsHaveTupleOrigins::Yes : FileSchemeUrlsHaveTupleOrigins::No,
         .default_time_zone = default_time_zone,
         .proxy_autoconfig_url = proxy_autoconfig_url.map([](auto value) { return value.to_byte_string(); }),
+        .hide_webdriver = m_browser_options.allow_webdriver_attach ? HideWebDriver::Yes : HideWebDriver::No,
     };
 
     create_platform_options(m_browser_options, m_request_server_options, m_web_content_options);
@@ -672,6 +681,9 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
     create_mach_port_server(profile_identity);
 
     m_browser_process = make<BrowserProcess>();
+    m_browser_process->on_attach_webdriver = [this](ByteString const& endpoint) { attach_webdriver(endpoint); };
+    if (m_browser_options.webdriver_attach_endpoint.has_value())
+        m_browser_process->set_webdriver_attach_endpoint(*m_browser_options.webdriver_attach_endpoint);
     if (coordinate_browser_process) {
         auto replace_from_before = replace_browser_from_before.map([](auto milliseconds) { return UnixDateTime::from_milliseconds_since_epoch(milliseconds); });
         auto disposition = TRY(m_browser_process->connect(m_browser_options.raw_urls, m_browser_options.new_window, profile().paths().runtime, profile_identity, ui_process_id(), replace_from_before));
@@ -680,6 +692,13 @@ ErrorOr<void> Application::initialize(Main::Arguments const& arguments)
             m_browser_is_unresponsive = disposition == BrowserProcess::ProcessDisposition::BrowserIsUnresponsive;
             return {};
         }
+    }
+    // This launch is the user's browser now; it attaches once it runs, with every startup step done as in a launch
+    // the user made.
+    if (m_browser_options.webdriver_attach_endpoint.has_value()) {
+        Core::deferred_invoke([this, endpoint = *m_browser_options.webdriver_attach_endpoint] {
+            attach_webdriver(endpoint);
+        });
     }
 
     // Reports belong to the profile they came from, whose own setting decides what happens to them.
@@ -1346,6 +1365,41 @@ void Application::webdriver_browser_connection_died(Badge<WebDriverBrowserConnec
 {
     m_webdriver_browser_connection = nullptr;
     m_webdriver_browser_connection_failed = true;
+    // A browser WebDriver attached to goes on as the user's browser, which a later session may attach to again.
+    if (m_browser_options.allow_webdriver_attach)
+        m_browser_options.webdriver_browser_endpoint.clear();
+}
+
+void Application::attach_webdriver(ByteString const& endpoint)
+{
+    if (!m_browser_options.allow_webdriver_attach) {
+        warnln("WebDriver asked to attach, but this browser was not started with --allow-webdriver-attach");
+        return;
+    }
+    if (m_webdriver_browser_connection) {
+        warnln("WebDriver asked to attach, but a WebDriver session is already attached");
+        return;
+    }
+
+    m_browser_options.webdriver_browser_endpoint = endpoint;
+    m_webdriver_browser_connection_failed = false;
+    if (!webdriver_browser_connection())
+        return;
+
+    // WebDriver learns of the windows the user already has, as it does of each window opened from now on.
+    ViewImplementation::for_each_view([](ViewImplementation& view) {
+        view.announce_to_webdriver();
+        return IterationDecision::Continue;
+    });
+}
+
+void Application::detach_webdriver(Badge<WebDriverBrowserConnection>)
+{
+    // NB: The connection asking for this is still handling its message.
+    Core::deferred_invoke([this] {
+        m_webdriver_browser_connection = nullptr;
+        m_browser_options.webdriver_browser_endpoint.clear();
+    });
 }
 
 void Application::push_webdriver_session_config(ViewImplementation& view)

@@ -61,6 +61,8 @@ public:
     static size_t session_count(Web::WebDriver::SessionFlags);
     static bool has_pending_http_session_creation();
     static void close_all();
+    // Sessions attach to the user's own browser (WebDriver --attach), which outlives them.
+    static void set_attaches_to_user_browser(bool);
 
     NonnullRefPtr<WebDriverPromise> enqueue_http_request(Function<NonnullRefPtr<WebDriverPromise>()>);
 

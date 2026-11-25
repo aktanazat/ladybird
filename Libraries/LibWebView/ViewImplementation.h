@@ -204,6 +204,8 @@ public:
     // what the UI decides for the tab. A page that displays the tab gets its viewport and focus on top of that.
     virtual void prepare_page_for_navigable(WebContentPage&);
     void prepare_page_for_tab(WebContentPage&);
+    // Tells a WebDriver session that attached to the running browser of this tab, as a tab opened in a session is.
+    void announce_to_webdriver();
     void did_change_display_page(Badge<CanonicalNavigable>, RefPtr<WebContentPage> previous_page);
     void did_cancel_loading(Badge<CanonicalNavigable>, bool canceled_navigation);
     void did_stop_loading(Badge<CanonicalTraversable>, bool stopped_navigation);

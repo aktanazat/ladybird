@@ -38,16 +38,27 @@ static ErrorOr<Core::Process> launch_process(StringView application, ReadonlySpa
     return result;
 }
 
-static Vector<ByteString> create_arguments(ByteString const& webdriver_endpoint, Optional<StringView> profile_name, Optional<StringView> profile_path, bool headless, bool expose_experimental_interfaces, bool expose_internals_object, bool force_cpu_painting, bool disable_sandbox, Optional<StringView> debug_process, Optional<StringView> default_time_zone, Optional<StringView> resource_substitution_map_path, Optional<ByteString> const& proxy_autoconfig_url)
+static Vector<ByteString> create_arguments(ByteString const& webdriver_endpoint, bool attach, Optional<StringView> profile_name, Optional<StringView> profile_path, bool headless, bool expose_experimental_interfaces, bool expose_internals_object, bool force_cpu_painting, bool disable_sandbox, Optional<StringView> debug_process, Optional<StringView> default_time_zone, Optional<StringView> resource_substitution_map_path, Optional<ByteString> const& proxy_autoconfig_url)
 {
     Vector<ByteString> arguments;
+
+    // The user's browser, running or started now as they would start it, attaches itself to this session.
+    if (attach) {
+        arguments.append("--webdriver-attach"sv);
+        arguments.append(webdriver_endpoint);
+        if (profile_name.has_value())
+            arguments.append(ByteString::formatted("--profile={}", *profile_name));
+        else if (profile_path.has_value())
+            arguments.append(ByteString::formatted("--profile-path={}", *profile_path));
+        return arguments;
+    }
+
 #if defined(AK_OS_MACOS)
     arguments.append("--webdriver-browser-mach-server-name"sv);
 #else
     arguments.append("--webdriver-browser-path"sv);
 #endif
     arguments.append(webdriver_endpoint);
-
     Vector<ByteString> certificate_args;
     for (auto const& certificate : certificates) {
         certificate_args.append(ByteString::formatted("--certificate={}", certificate));
@@ -108,6 +119,7 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
     bool force_cpu_painting = false;
     bool disable_sandbox = false;
     bool headless = false;
+    bool attach = false;
     Optional<StringView> debug_process;
     Optional<StringView> default_time_zone;
     Optional<StringView> listen_address;
@@ -128,6 +140,7 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
     args_parser.add_option(disable_sandbox, "Launch browser with helper process sandboxing disabled", "disable-sandbox");
     args_parser.add_option(debug_process, "Wait for a debugger to attach to the given process name (WebContent, RequestServer, etc.)", "debug-process", 0, "process-name");
     args_parser.add_option(headless, "Launch browser without a graphical interface", "headless");
+    args_parser.add_option(attach, "Attach to the browser running on the profile, which was started with --allow-webdriver-attach (or start it so), and leave it running when the session ends", "attach");
     args_parser.add_option(default_time_zone, "Default time zone", "default-time-zone", 0, "time-zone-id");
     args_parser.add_option(profile_name, "Select or create a named browser profile", "profile", 0, "name");
     args_parser.add_option(profile_path, "Use a self-contained browser profile at an absolute path", "profile-path", 0, "path");
@@ -174,15 +187,16 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
     TRY(Core::Directory::create(webdriver_socket_path, Core::Directory::CreateDirectories::Yes));
 
     // Unless a profile was selected explicitly, every browser instance launched by this WebDriver process shares one
-    // temporary profile, which is removed on clean exit.
+    // temporary profile, which is removed on clean exit. A session that attaches uses the user's default profile.
     Optional<ByteString> temporary_profile_path;
-    if (!profile_name.has_value() && !profile_path.has_value()) {
+    if (!attach && !profile_name.has_value() && !profile_path.has_value()) {
         auto profile_parent_directory = profiles_directory.has_value() ? ByteString { *profiles_directory } : Core::StandardPaths::tempfile_directory();
         temporary_profile_path = LexicalPath::join(profile_parent_directory, ByteString::formatted("ladybird-webdriver-profile-{:016x}-{:016x}", get_random<u64>(), get_random<u64>())).string();
         profile_path = temporary_profile_path->view();
     }
 
     auto& loop = Core::EventLoop::initialize_for_current_thread();
+    WebDriver::Session::set_attaches_to_user_browser(attach);
     if (stats_log)
         stats_log->start_sampling();
     Core::EventLoop::register_signal(SIGINT, handle_signal);
@@ -206,7 +220,7 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
         }
 
         auto launch_browser_callback = [&](ByteString const& webdriver_endpoint, bool headless, Optional<ByteString> const& proxy_autoconfig_url) {
-            auto arguments = create_arguments(webdriver_endpoint, profile_name, profile_path, headless, expose_experimental_interfaces, expose_internals_object, force_cpu_painting, disable_sandbox, debug_process, default_time_zone, resource_substitution_map_path, proxy_autoconfig_url);
+            auto arguments = create_arguments(webdriver_endpoint, attach, profile_name, profile_path, headless, expose_experimental_interfaces, expose_internals_object, force_cpu_painting, disable_sandbox, debug_process, default_time_zone, resource_substitution_map_path, proxy_autoconfig_url);
             return launch_process("Ladybird"sv, arguments.span());
         };
 

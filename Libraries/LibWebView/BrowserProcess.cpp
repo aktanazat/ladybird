@@ -387,17 +387,21 @@ ErrorOr<BrowserProcess::ProcessDisposition> BrowserProcess::connect(Vector<ByteS
     return ProcessDisposition::ContinueMainProcess;
 }
 
-static BrowserProcess::Handover hand_over(UIProcessClient& client, Vector<ByteString> const& raw_urls, NewWindow new_window, AK::Duration timeout)
+static BrowserProcess::Handover hand_over(UIProcessClient& client, Vector<ByteString> const& raw_urls, NewWindow new_window, Optional<ByteString> const& webdriver_attach_endpoint, AK::Duration timeout)
 {
     auto deadline = MonotonicTime::now() + timeout;
     bool done = false;
-    switch (new_window) {
-    case NewWindow::Yes:
-        done = client.send_sync_until<Messages::UIProcessServer::CreateNewWindow>(deadline, raw_urls);
-        break;
-    case NewWindow::No:
-        done = client.send_sync_until<Messages::UIProcessServer::CreateNewTab>(deadline, raw_urls);
-        break;
+    if (webdriver_attach_endpoint.has_value()) {
+        done = client.send_sync_until<Messages::UIProcessServer::AttachWebdriver>(deadline, *webdriver_attach_endpoint);
+    } else {
+        switch (new_window) {
+        case NewWindow::Yes:
+            done = client.send_sync_until<Messages::UIProcessServer::CreateNewWindow>(deadline, raw_urls);
+            break;
+        case NewWindow::No:
+            done = client.send_sync_until<Messages::UIProcessServer::CreateNewTab>(deadline, raw_urls);
+            break;
+        }
     }
     if (done)
         return BrowserProcess::Handover::Done;
@@ -423,7 +427,7 @@ ErrorOr<BrowserProcess::HandoverResult> BrowserProcess::connect_as_client(pid_t 
         return HandoverResult { process_is_gone(pid) ? Handover::BrowserIsGone : Handover::BrowserIsUnresponsive, pid };
 
     auto client = UIProcessClient::construct(make<IPC::Transport>(move(transport_ports.value().receive_right), move(transport_ports.value().send_right)));
-    return HandoverResult { hand_over(*client, raw_urls, new_window, handover_timeout), pid };
+    return HandoverResult { hand_over(*client, raw_urls, new_window, m_webdriver_attach_endpoint, handover_timeout), pid };
 }
 #else
 ErrorOr<BrowserProcess::HandoverResult> BrowserProcess::connect_as_client(ByteString const& socket_path, Vector<ByteString> const& raw_urls, NewWindow new_window, AK::Duration handover_timeout)
@@ -446,7 +450,7 @@ ErrorOr<BrowserProcess::HandoverResult> BrowserProcess::connect_as_client(ByteSt
 
     auto transport = TRY(IPC::Transport::from_socket(socket.release_value()));
     auto client = UIProcessClient::construct(move(transport));
-    auto handover = hand_over(*client, raw_urls, new_window, handover_timeout);
+    auto handover = hand_over(*client, raw_urls, new_window, m_webdriver_attach_endpoint, handover_timeout);
 #    if defined(AK_OS_WINDOWS)
     // FIXME: Find out whether a browser that turned us away is gone, as on the other platforms. Until then, nothing
     //        starts on its profile.
@@ -498,6 +502,11 @@ void BrowserProcess::accept_transport(NonnullOwnPtr<IPC::Transport> transport)
     client->on_new_window = [this](auto raw_urls) {
         if (this->on_new_window)
             this->on_new_window(raw_urls);
+    };
+
+    client->on_attach_webdriver = [this](auto const& endpoint) {
+        if (this->on_attach_webdriver)
+            this->on_attach_webdriver(endpoint);
     };
 }
 
@@ -578,6 +587,12 @@ void UIProcessConnectionFromClient::create_new_window(Vector<ByteString> urls)
 {
     if (on_new_window)
         on_new_window(sanitize_urls(urls));
+}
+
+void UIProcessConnectionFromClient::attach_webdriver(ByteString endpoint)
+{
+    if (on_attach_webdriver)
+        on_attach_webdriver(endpoint);
 }
 
 }

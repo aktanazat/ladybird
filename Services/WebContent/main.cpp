@@ -186,6 +186,7 @@ NEVER_INLINE static ErrorOr<ProcessState> initialize_process(Main::Arguments arg
     bool enable_test_mode = false;
     bool expose_experimental_interfaces = false;
     bool expose_internals_object = false;
+    bool hide_webdriver = false;
     bool wait_for_debugger = false;
     bool log_all_js_exceptions = false;
     bool enable_http_memory_cache = false;
@@ -205,6 +206,7 @@ NEVER_INLINE static ErrorOr<ProcessState> initialize_process(Main::Arguments arg
     args_parser.add_option(enable_test_mode, "Enable test mode", "test-mode");
     args_parser.add_option(expose_experimental_interfaces, "Expose experimental IDL interfaces", "expose-experimental-interfaces");
     args_parser.add_option(expose_internals_object, "Expose internals object", "expose-internals-object");
+    args_parser.add_option(hide_webdriver, "Leave pages as they are when WebDriver attaches to the user's browser", "hide-webdriver");
     args_parser.add_option(certificates, "Path to a certificate file", "certificate", 'C', "certificate");
     args_parser.add_option(wait_for_debugger, "Wait for debugger", "wait-for-debugger");
     args_parser.add_option(mach_server_name, "Mach server name", "mach-server-name", 0, "mach_server_name");
@@ -285,6 +287,7 @@ NEVER_INLINE static ErrorOr<ProcessState> initialize_process(Main::Arguments arg
     Web::HTML::Window::set_enable_test_mode(enable_test_mode);
     Web::HTML::Window::set_internals_object_exposed(expose_internals_object);
     Web::HTML::WindowOrWorkerGlobalScopeMixin::set_experimental_interfaces_exposed(expose_experimental_interfaces);
+    WebContent::WebDriverConnection::set_hidden_from_pages(hide_webdriver);
 
     Web::Bindings::set_collect_garbage_on_every_allocation_in_new_agents(collect_garbage_on_every_allocation);
     Web::Bindings::initialize_agent(Web::HTML::AgentType::SimilarOriginWindow);

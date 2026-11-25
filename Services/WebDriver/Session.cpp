@@ -41,6 +41,13 @@ static HashMap<String, NonnullRefPtr<Session>> s_http_sessions;
 // The session whose browser is starting, until it is appended to the active sessions or closed.
 static RefPtr<Session> s_session_being_created;
 
+static bool s_attaches_to_user_browser { false };
+
+void Session::set_attaches_to_user_browser(bool attaches)
+{
+    s_attaches_to_user_browser = attaches;
+}
+
 struct SessionCreationState : public RefCounted<SessionCreationState> {
     SessionCreationState(JsonValue capabilities)
         : capabilities(move(capabilities))
@@ -438,8 +445,8 @@ void Session::close()
     }
 
     // The browser may have exited on its own already; its death is one of the triggers for
-    // closing the session, so the process being gone is not an error here.
-    if (m_browser_process.has_value()) {
+    // closing the session, so the process being gone is not an error here. The user's browser stays.
+    if (m_browser_process.has_value() && !s_attaches_to_user_browser) {
         if (auto result = Core::Process::terminate_process(m_browser_process->pid(), Core::Process::TerminationMode::Graceful);
             result.is_error() && result.error().code() != ESRCH) {
             dbgln("Unable to terminate the browser process: {}", result.error());

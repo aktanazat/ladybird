@@ -107,6 +107,10 @@ struct BrowserOptions {
     ProfileTool profile_tool { ProfileTool::Callgrind };
     Optional<ByteString> profile_output {};
     Optional<ByteString> webdriver_browser_endpoint {};
+    // A browser the user runs may let WebDriver attach to it later (WebDriver --attach), and keeps running when that
+    // session ends. The endpoint is that of WebDriver asking this launch to attach the browser of its profile.
+    bool allow_webdriver_attach { false };
+    Optional<ByteString> webdriver_attach_endpoint {};
     Optional<DNSSettings> dns_settings {};
     Optional<u16> devtools_port;
     EnableContentBlocker enable_content_blocker { EnableContentBlocker::Yes };
@@ -187,6 +191,12 @@ enum class FileSchemeUrlsHaveTupleOrigins {
     Yes,
 };
 
+// A browser that WebDriver may attach to does not tell its pages so: navigator.webdriver stays false.
+enum class HideWebDriver {
+    No,
+    Yes,
+};
+
 struct WebContentOptions {
     Optional<ByteString> cache_path {};
     Optional<StringView> user_agent_preset {};
@@ -205,6 +215,7 @@ struct WebContentOptions {
     FileSchemeUrlsHaveTupleOrigins file_scheme_urls_have_tuple_origins { FileSchemeUrlsHaveTupleOrigins::No };
     Optional<StringView> default_time_zone {};
     Optional<ByteString> proxy_autoconfig_url {};
+    HideWebDriver hide_webdriver { HideWebDriver::No };
 };
 
 }

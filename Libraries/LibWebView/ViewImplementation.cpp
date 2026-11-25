@@ -4231,6 +4231,17 @@ void ViewImplementation::prepare_page_for_navigable(WebContentPage& page)
         send_screen_rects_to_page(page, *screens);
 }
 
+void ViewImplementation::announce_to_webdriver()
+{
+    // A tab without its handle yet announces itself once it gets one; picture-in-picture windows are not WebDriver's.
+    if (m_window_handle.is_empty() || m_owner_view_id.has_value() || !has_traversable())
+        return;
+    Application::the().push_webdriver_session_config(*this);
+    Application::the().notify_webdriver_window_created(m_window_handle);
+    if (auto* webdriver_bidi = WebDriverBiDi::the())
+        webdriver_bidi->top_level_traversable_did_get_window_handle(traversable());
+}
+
 void ViewImplementation::prepare_page_for_tab(WebContentPage& page)
 {
     prepare_page_for_navigable(page);

@@ -267,6 +267,8 @@ public:
     virtual void notify_webdriver_window_created(String const& handle);
     void notify_webdriver_window_closed(String const& handle);
     void webdriver_browser_connection_died(Badge<WebDriverBrowserConnection>);
+    void attach_webdriver(ByteString const& endpoint);
+    void detach_webdriver(Badge<WebDriverBrowserConnection>);
     void push_webdriver_session_config(ViewImplementation&);
     void push_webdriver_session_config(WebContentPage&);
     void update_webdriver_session_config(Badge<WebDriverBrowserConnection>, Function<void(WebDriverSessionConfig&)> update);

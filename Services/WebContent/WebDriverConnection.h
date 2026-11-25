@@ -34,6 +34,9 @@ class WebDriverConnection final
     , public Weakable<WebDriverConnection> {
 public:
     static NonnullRefPtr<WebDriverConnection> create(PageClient&);
+    // In the user's own browser, which a WebDriver session attached to, pages keep navigator.webdriver false and
+    // their pop-up blocking.
+    static void set_hidden_from_pages(bool hidden) { s_hidden_from_pages = hidden; }
     ~WebDriverConnection() = default;
 
     void visit_edges(JS::Cell::Visitor&);
@@ -44,6 +47,8 @@ public:
     void set_session_config(Web::WebDriver::PageLoadStrategy, bool strict_file_interactability, JsonValue const& timeouts);
 
 private:
+    static inline bool s_hidden_from_pages { false };
+
     explicit WebDriverConnection(PageClient&);
 
     void driver_execution_complete(Web::WebDriver::Response);
