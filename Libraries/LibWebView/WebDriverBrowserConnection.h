@@ -21,6 +21,9 @@ class WebDriverBrowserConnection final
 public:
     static ErrorOr<NonnullRefPtr<WebDriverBrowserConnection>> connect(ByteString const& webdriver_endpoint);
 
+    // The session this connection served is over; a command of it that is still running finishes without BiDi state.
+    void retire();
+
 private:
     explicit WebDriverBrowserConnection(NonnullOwnPtr<IPC::Transport>);
 
@@ -48,7 +51,7 @@ private:
     virtual void bidi_run_subscribe_steps(u64 command_id, String event_name, Vector<String> top_level_traversable_ids) override;
     virtual void set_bidi_enabled_events(Vector<String> event_names, HashMap<String, Optional<Vector<String>>> event_contexts) override;
 
-    NonnullOwnPtr<WebDriverBiDi> m_webdriver_bidi;
+    OwnPtr<WebDriverBiDi> m_webdriver_bidi;
 };
 
 }

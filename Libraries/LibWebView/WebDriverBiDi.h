@@ -180,8 +180,9 @@ private:
     u64 m_next_network_interception_generation { 0 };
     HashMap<String, BlockedNetworkRequest> m_blocked_network_requests;
 
-    u64 m_next_content_command_id;
     HashMap<u64, CommandResult> m_pending_content_commands;
+    // The browsingContext.create requests not yet answered, by the view that lets each one open its window.
+    HashMap<u64, u64> m_pending_opens;
 
     // https://w3c.github.io/webdriver-bidi/#wait-queue
     struct Waiter {

@@ -111,9 +111,13 @@ static ErrorOr<Optional<Vector<String>>, Web::WebDriver::Error> get_optional_non
     return result;
 }
 
+// NB: Content command ids go on across sessions, so a command of a session that ended never completes one of a
+//     session that attached after it.
+static u64 s_next_content_command_id { FIRST_CONTENT_COMMAND_ID };
+static u64 s_next_open_id { 1 };
+
 WebDriverBiDi::WebDriverBiDi(WebDriverBrowserConnection& connection)
     : m_connection(connection)
-    , m_next_content_command_id(FIRST_CONTENT_COMMAND_ID)
 {
     VERIFY(!s_the);
     s_the = this;
@@ -122,6 +126,12 @@ WebDriverBiDi::WebDriverBiDi(WebDriverBrowserConnection& connection)
 WebDriverBiDi::~WebDriverBiDi()
 {
     s_the = nullptr;
+
+    // NB: A create that never completed leaves no window for a page to open without the user's input.
+    for (auto const& [open_id, view_id] : m_pending_opens) {
+        if (auto view = ViewImplementation::find_view_by_id(view_id); view.has_value())
+            view->forget_webdriver_open(open_id);
+    }
 
     // NB: Web content runs no WebDriver BiDi steps once the session is gone.
     if (m_session_state.is_active) {
@@ -140,8 +150,9 @@ void WebDriverBiDi::complete_command(u64 command_id, Web::WebDriver::Response re
 bool WebDriverBiDi::did_complete_content_command(u64 command_id, Web::WebDriver::Response& response)
 {
     auto on_complete = m_pending_content_commands.take(command_id);
+    // NB: A BiDi command of a session that ended completes nothing now, and never reaches classic WebDriver.
     if (!on_complete.has_value())
-        return false;
+        return command_id >= FIRST_CONTENT_COMMAND_ID;
 
     on_complete.value()(move(response));
     return true;
@@ -1068,7 +1079,7 @@ void WebDriverBiDi::run_content_command(CanonicalNavigable const& navigable, Str
         return;
     }
 
-    auto command_id = m_next_content_command_id++;
+    auto command_id = s_next_content_command_id++;
     m_pending_content_commands.set(command_id, move(on_complete));
     view->run_webdriver_bidi_content_command(command_id, navigable.id(), method, move(params));
 }
@@ -1100,7 +1111,7 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
             }
             auto id = params.get_string("request"sv).release_value();
             if (auto blocked = m_blocked_network_requests.get(id); blocked.has_value() && blocked->page->routed_connection()) {
-                auto content_command_id = m_next_content_command_id++;
+                auto content_command_id = s_next_content_command_id++;
                 // NB: The process running a navigation's request reports the response that WebDriver provides for it with
                 //     a body of its own. The process also reports which navigation the request belongs to, so the
                 //     navigation's loader takes such a body only for the request's URL and with the bytes WebDriver gave.
@@ -1560,10 +1571,19 @@ void WebDriverBiDi::browsing_context_create(JsonObject const& params, CommandRes
     for (auto& traversable : all_top_level_traversables())
         existing_handles.set(navigable_id(traversable));
 
-    // NB: The window this opens is WebDriver's, not a pop-up of the page, which the UI process would otherwise block.
-    Application::the().webdriver_will_open_traversable({}, type == "window"sv);
-    run_content_command(*reference_navigable, "browsingContext.create"_string, move(create_params), [this, background, is_tab = type == "tab"sv, reference_handle = move(reference_handle), existing_handles = move(existing_handles), on_complete = move(on_complete)](Web::WebDriver::Response response) mutable {
-        Application::the().webdriver_did_open_traversable({}, !is_tab);
+    // NB: The window this opens is WebDriver's, not a pop-up of the page, which the UI process would otherwise block;
+    //     the view hosting the reference navigable lets exactly this request through, as a window if one was asked for.
+    auto open_id = s_next_open_id++;
+    auto opening_view = reference_navigable->top_level_traversable().view();
+    if (opening_view.has_value()) {
+        opening_view->expect_webdriver_open(open_id, type == "window"sv);
+        m_pending_opens.set(open_id, opening_view->view_id());
+    }
+    run_content_command(*reference_navigable, "browsingContext.create"_string, move(create_params), [this, open_id, background, is_tab = type == "tab"sv, reference_handle = move(reference_handle), existing_handles = move(existing_handles), on_complete = move(on_complete)](Web::WebDriver::Response response) mutable {
+        if (auto view_id = m_pending_opens.take(open_id); view_id.has_value()) {
+            if (auto view = ViewImplementation::find_view_by_id(*view_id); view.has_value())
+                view->forget_webdriver_open(open_id);
+        }
         if (response.is_error())
             return on_complete(move(response));
 

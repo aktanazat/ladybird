@@ -257,7 +257,6 @@ void View::forward_callbacks_to_ui(bool is_tab)
         };
 
         on_new_web_view = [this](Web::HTML::ActivateTab activate_tab, Web::HTML::WebViewHints hints, WebView::CanonicalTraversable& traversable) {
-            hints.new_window = hints.new_window || Application::the().webdriver_is_opening_window();
             auto& view = Application::the().create_view(initial_state_for_related_view(), traversable);
             if (auto* ui = ConnectionFromUI::the()) {
                 push_state_to_ui();

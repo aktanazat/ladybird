@@ -41,6 +41,11 @@ void WebDriverBrowserConnection::die()
     Application::the().webdriver_browser_connection_died({});
 }
 
+void WebDriverBrowserConnection::retire()
+{
+    m_webdriver_bidi = nullptr;
+}
+
 void WebDriverBrowserConnection::close_session()
 {
     // A session that attached to the user's browser leaves it running.
@@ -355,22 +360,26 @@ void WebDriverBrowserConnection::set_permission(u64 command_id, String window_ha
 
 void WebDriverBrowserConnection::bidi_command(u64 command_id, String method, JsonValue params)
 {
-    m_webdriver_bidi->run_command(command_id, method, move(params));
+    if (m_webdriver_bidi)
+        m_webdriver_bidi->run_command(command_id, method, move(params));
 }
 
 void WebDriverBrowserConnection::bidi_get_top_level_traversables(u64 command_id, Vector<String> navigable_ids)
 {
-    m_webdriver_bidi->get_top_level_traversables(command_id, navigable_ids);
+    if (m_webdriver_bidi)
+        m_webdriver_bidi->get_top_level_traversables(command_id, navigable_ids);
 }
 
 void WebDriverBrowserConnection::bidi_run_subscribe_steps(u64 command_id, String event_name, Vector<String> top_level_traversable_ids)
 {
-    m_webdriver_bidi->run_subscribe_steps(command_id, event_name, top_level_traversable_ids);
+    if (m_webdriver_bidi)
+        m_webdriver_bidi->run_subscribe_steps(command_id, event_name, top_level_traversable_ids);
 }
 
 void WebDriverBrowserConnection::set_bidi_enabled_events(Vector<String> event_names, HashMap<String, Optional<Vector<String>>> event_contexts)
 {
-    m_webdriver_bidi->set_enabled_events(event_names, move(event_contexts));
+    if (m_webdriver_bidi)
+        m_webdriver_bidi->set_enabled_events(event_names, move(event_contexts));
 }
 
 }

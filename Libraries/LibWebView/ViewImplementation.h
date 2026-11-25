@@ -206,6 +206,11 @@ public:
     void prepare_page_for_tab(WebContentPage&);
     // Tells a WebDriver session that attached to the running browser of this tab, as a tab opened in a session is.
     void announce_to_webdriver();
+    // A WebDriver BiDi browsingContext.create opens its window from this view's page: that request, and no pop-up of
+    // the page, passes the pop-up blocker, in a window of its own if new_window.
+    void expect_webdriver_open(u64 open_id, bool new_window) { m_webdriver_opens.append({ open_id, new_window }); }
+    void forget_webdriver_open(u64 open_id) { m_webdriver_opens.remove_all_matching([&](auto const& open) { return open.id == open_id; }); }
+    Optional<bool> take_webdriver_open() { return m_webdriver_opens.is_empty() ? Optional<bool> {} : m_webdriver_opens.take_first().new_window; }
     void did_change_display_page(Badge<CanonicalNavigable>, RefPtr<WebContentPage> previous_page);
     void did_cancel_loading(Badge<CanonicalNavigable>, bool canceled_navigation);
     void did_stop_loading(Badge<CanonicalTraversable>, bool stopped_navigation);
@@ -1150,6 +1155,11 @@ protected:
     Optional<Gfx::IntPoint> m_window_position;
     Optional<Gfx::IntSize> m_window_size;
     Optional<u64> m_os_window_id;
+    struct WebDriverOpen {
+        u64 id { 0 };
+        bool new_window { false };
+    };
+    Vector<WebDriverOpen> m_webdriver_opens;
     Web::CSS::PreferredContrast m_preferred_contrast { Web::CSS::PreferredContrast::Auto };
     Web::CSS::PreferredMotion m_preferred_motion { Web::CSS::PreferredMotion::Auto };
 

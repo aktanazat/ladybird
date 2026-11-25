@@ -120,22 +120,6 @@ public:
     static FontServiceHost& font_service_host() { return *the().m_font_service_host; }
     JsonValue const& site_compatibility_data() const { return m_site_compatibility_data; }
     bool blocks_pop_ups() const { return m_blocks_pop_ups; }
-    // A window WebDriver BiDi asks for passes the pop-up blocker, which is for the page's own windows, and one of type
-    // "window" opens in an OS window of its own.
-    void webdriver_will_open_traversable(Badge<WebDriverBiDi>, bool new_window)
-    {
-        ++m_webdriver_traversables_opening;
-        if (new_window)
-            ++m_webdriver_windows_opening;
-    }
-    void webdriver_did_open_traversable(Badge<WebDriverBiDi>, bool new_window)
-    {
-        --m_webdriver_traversables_opening;
-        if (new_window)
-            --m_webdriver_windows_opening;
-    }
-    bool webdriver_is_opening_traversable() const { return m_webdriver_traversables_opening > 0; }
-    bool webdriver_is_opening_window() const { return m_webdriver_windows_opening > 0; }
     ErrorOr<void> reload_site_compatibility_data();
 
     bool claim_cpu_profiler(ProcessType);
@@ -761,8 +745,6 @@ private:
     Web::NavigatorCompatibilityMode m_navigator_compatibility_mode { Web::default_navigator_compatibility_mode };
     bool m_scripting_enabled { true };
     bool m_blocks_pop_ups { true };
-    size_t m_webdriver_traversables_opening { 0 };
-    size_t m_webdriver_windows_opening { 0 };
     bool m_shows_line_box_borders { false };
     bool m_shows_caret_hit_test_debug_overlay { false };
     bool m_shows_compositor_layers { false };

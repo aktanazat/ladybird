@@ -157,8 +157,8 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
         return Error::from_string_literal("--profile, --profile-path, and --profiles-directory are mutually exclusive");
 
     // NB: A WebDriver client controls the browser with no authentication, so by default, as other browsers' drivers
-    //     do, only the local machine may connect.
-    bool has_persistent_profile = profile_name.has_value() || profile_path.has_value();
+    //     do, only the local machine may connect. A persistent profile and the user's own browser only ever allow that.
+    bool has_persistent_profile = attach || profile_name.has_value() || profile_path.has_value();
     if (!listen_address.has_value())
         listen_address = "127.0.0.1"sv;
 
@@ -169,7 +169,7 @@ ErrorOr<int> ladybird_main(Main::Arguments arguments)
     }
 
     if (has_persistent_profile && (*ipv4_address)[0] != 127)
-        return Error::from_string_literal("--profile and --profile-path require a loopback listen address");
+        return Error::from_string_literal("--attach, --profile and --profile-path require a loopback listen address");
 
     if ((u16)port != port) {
         warnln("Invalid port number: {}", port);

@@ -1367,6 +1367,9 @@ void Application::notify_webdriver_window_closed(String const& handle)
 
 void Application::webdriver_browser_connection_died(Badge<WebDriverBrowserConnection>)
 {
+    // NB: A command still running for the old session holds the connection; its BiDi state goes now.
+    if (m_webdriver_browser_connection)
+        m_webdriver_browser_connection->retire();
     m_webdriver_browser_connection = nullptr;
     m_webdriver_browser_connection_failed = true;
     // A browser WebDriver attached to goes on as the user's browser, which a later session may attach to again.
@@ -1401,6 +1404,10 @@ void Application::detach_webdriver(Badge<WebDriverBrowserConnection>)
 {
     // NB: The connection asking for this is still handling its message.
     Core::deferred_invoke([this] {
+        // NB: A command still running for the session holds the connection; its BiDi state goes now, so a session
+        //     attaching later starts with its own.
+        if (m_webdriver_browser_connection)
+            m_webdriver_browser_connection->retire();
         m_webdriver_browser_connection = nullptr;
         m_browser_options.webdriver_browser_endpoint.clear();
     });

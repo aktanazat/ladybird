@@ -3436,9 +3436,11 @@ Messages::WebContentClient::DidRequestNewWebViewResponse WebContentPage::did_req
         // --> If currentNavigable's active window does not have transient activation and the user agent has been
         //     configured to not show popups
         // NB: The popup blocker runs in the renderer, which a compromised renderer skips, so the UI process checks the
-        //     activation of the input it delivered to the page.
-        if (Application::the().blocks_pop_ups() && !has_transient_user_activation() && !Application::the().webdriver_is_opening_traversable())
+        //     activation of the input it delivered to the page. A window WebDriver BiDi asked this view for passes.
+        auto webdriver_open = view().take_webdriver_open();
+        if (Application::the().blocks_pop_ups() && !has_transient_user_activation() && !webdriver_open.has_value())
             return { {}, {}, {}, {}, {}, {}, {}, Web::HTML::VisibilityState::Hidden, {} };
+        hints.new_window = webdriver_open.value_or(false);
     }
 
     auto root_navigable_id = Application::the().allocate_ui_process_cross_process_id();
