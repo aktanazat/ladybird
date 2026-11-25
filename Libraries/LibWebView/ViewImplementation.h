@@ -774,6 +774,8 @@ public:
     // Shows the toolbar button a WebDriver BiDi session asked for (ladybird:setAction) on this tab: its tooltip and
     // the text on it; an empty title hides it.
     Function<void(String const& title, String const& badge)> on_set_action;
+    // Names the UI's OS window that shows this tab (ladybird:setWindowName); an empty name clears it.
+    Function<void(String const& name)> on_set_window_name;
     Function<void(Gfx::IntSize)> on_resize_window;
     Function<void()> on_maximize_window;
     Function<void()> on_minimize_window;

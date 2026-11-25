@@ -133,6 +133,8 @@ WebDriverBiDi::~WebDriverBiDi()
             view.on_set_action({}, {});
         return IterationDecision::Continue;
     });
+    for (auto os_window_id : m_named_windows)
+        name_window(os_window_id, {});
 
     // NB: A create that never completed leaves no window for a page to open without the user's input.
     for (auto const& [open_id, view_id] : m_pending_opens) {
@@ -1172,6 +1174,8 @@ void WebDriverBiDi::run_command(u64 command_id, String const& method, JsonValue 
         return ladybird_move_tab(params, move(on_complete));
     if (method == "ladybird:setAction"sv)
         return ladybird_set_action(params, move(on_complete));
+    if (method == "ladybird:setWindowName"sv)
+        return ladybird_set_window_name(params, move(on_complete));
     if (method == "browser.getClientWindows"sv)
         return browser_get_client_windows(move(on_complete));
     if (method == "storage.getCookies"sv)
@@ -1331,6 +1335,36 @@ void WebDriverBiDi::ladybird_set_action(JsonObject const& params, CommandResult 
         });
     }
     on_complete(JsonValue {});
+}
+
+// ladybird:setWindowName { clientWindow, name }: names a client window, as a tab group names its tabs: the window
+// shows the name in its toolbar and title. An empty name clears it; the names go when the session ends.
+void WebDriverBiDi::ladybird_set_window_name(JsonObject const& params, CommandResult on_complete)
+{
+    auto client_window = TRY_OR_COMPLETE(get_string(params, "clientWindow"sv));
+    auto name = TRY_OR_COMPLETE(get_string(params, "name"sv));
+    auto window = client_window.bytes_as_string_view();
+    auto os_window_id = window.starts_with("window-"sv) ? window.substring_view(7).to_number<u64>() : Optional<u64> {};
+    if (!os_window_id.has_value() || !name_window(*os_window_id, name))
+        return on_complete(invalid_argument("Parameter 'clientWindow' must name a client window"sv));
+    if (name.is_empty())
+        m_named_windows.remove(*os_window_id);
+    else
+        m_named_windows.set(*os_window_id);
+    on_complete(JsonValue {});
+}
+
+bool WebDriverBiDi::name_window(u64 os_window_id, String const& name)
+{
+    auto named = false;
+    ViewImplementation::for_each_view([&](ViewImplementation& view) {
+        if (view.owner_view_id().has_value() || view.os_window_id() != os_window_id || !view.on_set_window_name)
+            return IterationDecision::Continue;
+        view.on_set_window_name(name);
+        named = true;
+        return IterationDecision::Break;
+    });
+    return named;
 }
 
 void WebDriverBiDi::show_action(ViewImplementation& view) const

@@ -20,6 +20,7 @@
 
 class QAction;
 class QHBoxLayout;
+class QLabel;
 class QToolButton;
 
 namespace Ladybird {
@@ -61,6 +62,8 @@ public:
     static int toolbar_height(bool window_controls_visible);
 
     void bind(Tab*);
+    // The name a WebDriver BiDi session gives the window (BrowserWindow::set_name); an empty one shows none.
+    void set_window_name(QString const&);
     QAction& zoom_level_action() const { return m_zoom_level_action.action(); }
     void release_location_edit(Tab&);
 
@@ -187,6 +190,7 @@ private:
     FeedbackButton* m_feedback_button { nullptr };
     // The button an attached WebDriver BiDi session shows on the tab in front (Tab::action_title).
     QToolButton* m_action_button { nullptr };
+    QLabel* m_window_name_label { nullptr };
     QPointer<FeedbackPopover> m_feedback_popover;
 
     bool m_is_updating_chrome_style { false };

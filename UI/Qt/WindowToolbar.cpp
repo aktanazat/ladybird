@@ -46,6 +46,7 @@
 #include <QFrame>
 #include <QGraphicsOpacityEffect>
 #include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
@@ -1251,6 +1252,10 @@ WindowToolbar::WindowToolbar(WebView::IsPrivate is_private, QWidget* parent)
             HubConnection::the().async_view_action_clicked(m_tab->view().view_id());
     });
 
+    m_window_name_label = new QLabel(m_toolbar);
+    m_window_name_label->setObjectName("LadybirdWindowName");
+    m_window_name_label->hide();
+
     m_navigate_back_action.action().setEnabled(false);
     m_navigate_forward_action.action().setEnabled(false);
     // NB: The application's reload actions own the shortcuts, so the window and its View menu share one action for each.
@@ -1446,6 +1451,7 @@ void WindowToolbar::lay_out_as_row()
     }
     toolbar_layout->addWidget(m_sidebar_slot, 0, Qt::AlignVCenter);
     toolbar_layout->addWidget(m_navigation_buttons, 0, Qt::AlignVCenter);
+    toolbar_layout->addWidget(m_window_name_label, 0, Qt::AlignVCenter);
     m_navigation_buttons->show();
     toolbar_layout->addWidget(&field_slot(), 1);
     toolbar_layout->addWidget(m_downloads_button, 0, Qt::AlignVCenter);
@@ -1476,6 +1482,7 @@ void WindowToolbar::lay_out_in_sidebar()
     // NB: The field's container leaves room for its focus ring all around, which the row's margins make up for.
     auto ring_room = TOOLBAR_LOCATION_FOCUS_RING_ROOM;
     field_row->setContentsMargins(m_sidebar_inset - ring_room, SIDEBAR_FIELD_TOP_MARGIN - ring_room, m_sidebar_inset - ring_room, SIDEBAR_FIELD_BOTTOM_MARGIN - ring_room);
+    field_row->addWidget(m_window_name_label, 0, Qt::AlignVCenter);
     field_row->addWidget(&field_slot(), 1);
     toolbar_layout->addLayout(field_row);
     host_field_in_panel();
@@ -2058,6 +2065,13 @@ void WindowToolbar::recreate_icons()
     if (m_feedback_button)
         m_feedback_button->setIcon(create_chrome_icon(ChromeIcon::Feedback, Theme::chrome_palette(*this), activity, TOOLBAR_ICON_SIZE));
     update_window_control_icons();
+}
+
+void WindowToolbar::set_window_name(QString const& name)
+{
+    m_window_name_label->setText(name);
+    m_window_name_label->setToolTip(name);
+    m_window_name_label->setVisible(!name.isEmpty());
 }
 
 void WindowToolbar::update_action_button()

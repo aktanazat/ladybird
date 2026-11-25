@@ -108,6 +108,7 @@ static constexpr auto s_command_names = to_array<StringView>({
     // https://w3c.github.io/webdriver-bidi/#protocol-definition: an extension command, named prefix:name.
     "ladybird:moveTab"sv,
     "ladybird:setAction"sv,
+    "ladybird:setWindowName"sv,
 });
 
 // https://w3c.github.io/webdriver-bidi/#module-name

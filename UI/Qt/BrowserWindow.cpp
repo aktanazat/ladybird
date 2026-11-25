@@ -1379,7 +1379,14 @@ void BrowserWindow::update_window_title(QString const& title)
     char const* format = is_private() == WebView::IsPrivate::Yes
         ? "%1 - " BROWSER_PRODUCT_NAME " (Private)"
         : "%1 - " BROWSER_PRODUCT_NAME;
-    setWindowTitle(QString(format).arg(title));
+    setWindowTitle(QString(format).arg(m_name.isEmpty() ? title : QString("%1 — %2").arg(m_name, title)));
+}
+
+void BrowserWindow::set_name(QString const& name)
+{
+    m_name = name;
+    update_window_title(m_current_tab ? m_current_tab->title() : QString {});
+    toolbar().set_window_name(name);
 }
 
 void BrowserWindow::tab_title_changed(int index, QString const& title)

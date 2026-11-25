@@ -164,6 +164,10 @@ public:
     Optional<SessionWindowId> session_window_id() const { return m_session_window_id; }
     // Names this window to the Hub, for WebDriver BiDi's client windows.
     u64 os_window_id() const { return m_os_window_id; }
+    // A name a WebDriver BiDi session gives this window (ladybird:setWindowName), as a tab group's: shown in its
+    // toolbar and title.
+    QString const& name() const { return m_name; }
+    void set_name(QString const&);
 
     int tab_count() { return m_tabs_container->count(); }
     int tab_index(Tab*);
@@ -369,6 +373,7 @@ private:
     Optional<SessionWindowId> m_session_window_id;
     static inline u64 s_next_os_window_id { 0 };
     u64 m_os_window_id { ++s_next_os_window_id };
+    QString m_name;
     size_t m_failed_download_count { 0 };
     size_t m_acknowledged_failed_download_count { 0 };
     Optional<i64> m_window_close_active_tab_index;

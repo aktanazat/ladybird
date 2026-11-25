@@ -250,6 +250,14 @@ void HubConnection::view_set_action(u64 view_id, String title, String badge)
     }
 }
 
+void HubConnection::window_set_name(u64 os_window_id, String name)
+{
+    for (auto* widget : QApplication::topLevelWidgets()) {
+        if (auto* window = as_if<BrowserWindow>(widget); window && window->os_window_id() == os_window_id)
+            window->set_name(qstring_from_ak_string(name));
+    }
+}
+
 void HubConnection::view_favicon_change(u64 view_id, Optional<Gfx::ShareableBitmap> favicon)
 {
     auto* view = RemoteView::find(view_id);

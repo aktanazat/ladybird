@@ -160,6 +160,8 @@ private:
     static void answer_when_moved(WeakPtr<WebDriverBiDi>, u64 view_id, String context, Optional<u64> to, Optional<u64> from, CommandResult);
     void ladybird_set_action(JsonObject const& params, CommandResult);
     void show_action(ViewImplementation&) const;
+    void ladybird_set_window_name(JsonObject const& params, CommandResult);
+    static bool name_window(u64 os_window_id, String const& name);
     void start_next_tab_move(u64 view_id);
     void storage_get_cookies(JsonObject const& params, CommandResult);
     void storage_set_cookie(JsonObject const& params, CommandResult);
@@ -200,6 +202,8 @@ private:
     };
     Action m_default_action;
     HashMap<u64, Action> m_view_actions;
+    // The client windows ladybird:setWindowName named, which lose their names when the session ends.
+    HashTable<u64> m_named_windows;
 
     // https://w3c.github.io/webdriver-bidi/#wait-queue
     struct Waiter {
