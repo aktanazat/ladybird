@@ -29,6 +29,14 @@ public:
     static HubConnection& the();
     static HubConnection* the_if_connected();
 
+    // The toolbar action (ladybird:setAction) the Hub sent for a view before its tab existed, as it does while it sets
+    // the view up: the tab takes it once it has the view.
+    struct Action {
+        String title;
+        String badge;
+    };
+    Optional<Action> take_action_before_tab(u64 view_id) { return m_actions_before_tabs.take(view_id); }
+
     // The Hub has answered initialize(), so from now on the UI cannot go on without it.
     void did_initialize();
 
@@ -56,6 +64,7 @@ private:
     bool m_did_initialize { false };
     u64 m_next_request_id { 1 };
     HashMap<u64, Function<void(RequestResponse)>> m_requests;
+    HashMap<u64, Action> m_actions_before_tabs;
     HashMap<u64, Function<void(ByteString)>> m_platform_features_description_requests;
     OwnPtr<Core::GeolocationProvider> m_geolocation_provider;
     HashMap<u64, Core::GeolocationProvider::RequestId> m_geolocation_requests;

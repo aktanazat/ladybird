@@ -240,14 +240,19 @@ void HubConnection::view_move_to_window(u64 view_id, Optional<u64> os_window_id,
 
 void HubConnection::view_set_action(u64 view_id, String title, String badge)
 {
+    auto found = false;
     for (auto* widget : QApplication::topLevelWidgets()) {
         if (auto* window = as_if<BrowserWindow>(widget)) {
             window->for_each_tab([&](Tab& tab) {
-                if (tab.view().view_id() == view_id)
-                    tab.set_action(qstring_from_ak_string(title), qstring_from_ak_string(badge));
+                if (tab.view().view_id() != view_id)
+                    return;
+                tab.set_action(qstring_from_ak_string(title), qstring_from_ak_string(badge));
+                found = true;
             });
         }
     }
+    if (!found)
+        m_actions_before_tabs.set(view_id, { move(title), move(badge) });
 }
 
 void HubConnection::window_set_name(u64 os_window_id, String name)

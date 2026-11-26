@@ -152,10 +152,6 @@ ViewImplementation::ViewImplementation(IsPrivate is_private)
 ViewImplementation::~ViewImplementation()
 {
     abandon_user_prompt();
-    // NB: What waits on this view's window hears that it went.
-    run_window_geometry_waiters();
-    for (auto& waiter : exchange(m_os_window_waiters, {}))
-        waiter(true);
     stop_counting_as_owned_view();
     Application::the().media_session_coordinator().remove_view(view_id());
     // The frontend may be torn down already, so clearing the ongoing navigation must not report a URL change to it, nor
@@ -168,6 +164,13 @@ ViewImplementation::~ViewImplementation()
     // Leave the views before the permission manager hears: a one-time grant that ends with this view has it revoke
     // location in every view that shows the site, and this one is on its way out.
     all_views().remove(m_view_id);
+    // NB: What waits on this view's window hears that it went, once it can no longer find the view: a waiter's answer
+    //     may start more work for it (the next move of the tab), which must find it gone.
+    if (m_os_window_timer)
+        m_os_window_timer->stop();
+    run_window_geometry_waiters();
+    for (auto& waiter : exchange(m_os_window_waiters, {}))
+        waiter(true);
     session().permission_manager->remove_view(view_id());
     if (m_top_level_traversable) {
         m_top_level_traversable->clear_ongoing_navigation();

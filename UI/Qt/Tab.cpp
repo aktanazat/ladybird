@@ -214,6 +214,8 @@ void Tab::initialize(Optional<u64> hub_view_id)
     };
 
     m_view = new WebContentView(this, hub_view_id, AK::move(view_initial_state));
+    if (auto action = HubConnection::the().take_action_before_tab(m_view->view_id()); action.has_value())
+        set_action(qstring_from_ak_string(action->title), qstring_from_ak_string(action->badge));
     // The window reports its geometry to its tabs as it is moved and resized, so a tab opened later has to be told
     // where the window stands now.
     m_view->set_window_position({ m_window->x(), m_window->y() });
