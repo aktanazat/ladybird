@@ -52,6 +52,12 @@ void WebDriverBrowserConnection::webauthn_command(u64 command_id, String command
 {
     if (!m_virtual_authenticators)
         return;
+    // NB: A browser a session attached to is the user's own: a virtual authenticator there would answer his own sign-ins
+    //     in every tab, with keys that go with the session.
+    if (Application::browser_options().allow_webdriver_attach) {
+        async_command_complete(command_id, Web::WebDriver::Error::from_code(Web::WebDriver::ErrorCode::UnsupportedOperation, "Virtual authenticators need a browser this session started, not one it attached to"sv));
+        return;
+    }
     async_command_complete(command_id, m_virtual_authenticators->run_command(command, arguments, payload));
 }
 
