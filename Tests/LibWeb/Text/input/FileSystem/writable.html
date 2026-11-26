@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<script src="../include.js"></script>
+<script>
+    promiseTest(async () => {
+        const root = await navigator.storage.getDirectory();
+        const name = "opfs-writable-" + uniqueID();
+        const handle = await root.getFileHandle(name, { create: true });
+
+        try {
+            const stream = await handle.createWritable();
+            println("writable subclass: " + (stream instanceof FileSystemWritableFileStream && stream instanceof WritableStream));
+            println("window sync method: " + typeof handle.createSyncAccessHandle);
+            await stream.write("abcd");
+            await stream.seek(1);
+            await stream.write(new Uint8Array([66]));
+            await stream.write({ type: "write", position: 3, data: new Blob(["D"]) });
+            await stream.write({ type: "seek", position: 5 });
+            await stream.write(Uint8Array.of(70).buffer);
+            await stream.write({ type: "truncate", size: 7 });
+            const before = await handle.getFile();
+            println("file size before commit: " + before.size);
+            await stream.close();
+            const file = await handle.getFile();
+            println("file metadata: " + (file instanceof File && file.name === name && file.size === 7 && file.lastModified > 0));
+            println("bytes: " + [...new Uint8Array(await file.arrayBuffer())].join(","));
+            println("original snapshot: " + before.size);
+
+            const kept = await handle.createWritable({ keepExistingData: true });
+            await kept.truncate(4);
+            await kept.close();
+            println("keep existing: " + await (await handle.getFile()).text());
+
+            const pending = await handle.createWritable();
+            const other = await handle.createWritable();
+            await pending.write("discard");
+            await other.write("also discard");
+            await pending.abort();
+            await other.abort();
+            println("abort preserves committed bytes: " + await (await handle.getFile()).text());
+
+            const throughWriter = await handle.createWritable();
+            const writer = throughWriter.getWriter();
+            println("writer locks stream: " + throughWriter.locked);
+            await writer.write(new DataView(Uint8Array.of(111, 107).buffer));
+            await writer.close();
+            println("writer commits: " + await (await handle.getFile()).text());
+
+            const piped = await handle.createWritable();
+            await new Blob(["pipe"]).stream().pipeTo(piped);
+            println("pipe commits: " + await (await handle.getFile()).text());
+
+            const malformed = await handle.createWritable();
+            try {
+                await malformed.write({ type: "seek" });
+                println("missing position: resolved");
+            } catch (error) {
+                println("missing position: " + error.name);
+            }
+
+            const tooWide = await handle.createWritable();
+            await tooWide.seek(-1);
+            try {
+                await tooWide.write("outside the size limit");
+                println("wide offset: resolved");
+            } catch (error) {
+                println("wide offset: " + error.name);
+            }
+        } finally {
+            await root.removeEntry(name);
+        }
+    });
+</script>

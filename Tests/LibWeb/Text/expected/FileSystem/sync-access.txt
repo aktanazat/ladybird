@@ -1,0 +1,13 @@
+worker handle: true
+same entry after posting handle: true
+exclusive contention: NoModificationAllowedError
+sync bytes written: 2
+sync size: 4
+sync view read: 2 255,66,0,255,255
+sync sequential read: 68
+writable blocked by sync: NoModificationAllowedError
+recursive removal blocked: NoModificationAllowedError
+window sees flushed bytes: 65,66,0,68
+closed sync handle: InvalidStateError
+window sees truncation: AB
+sync blocked by writable: NoModificationAllowedError

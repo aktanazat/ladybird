@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<script src="../include.js"></script>
+<script>
+    async function rejectionName(operation) {
+        try {
+            await operation();
+            return "resolved";
+        } catch (error) {
+            return error.name;
+        }
+    }
+
+    promiseTest(async () => {
+        const root = await navigator.storage.getDirectory();
+        const directoryName = "opfs-handles-" + uniqueID();
+        const directory = await root.getDirectoryHandle(directoryName, { create: true });
+
+        try {
+            println("root: " + (root instanceof FileSystemDirectoryHandle) + " " + root.kind + " " + JSON.stringify(root.name));
+            println("same root: " + await root.isSameEntry(await navigator.storage.getDirectory()));
+            println("window sync handle: " + typeof globalThis.FileSystemSyncAccessHandle);
+
+            const dir = await directory.getDirectoryHandle(".0_chat", { create: true });
+            const file = await dir.getFileHandle("é.txt", { create: true });
+            println("file: " + (file instanceof FileSystemHandle) + " " + file.kind + " " + file.name);
+            println("same file: " + await file.isSameEntry(await dir.getFileHandle("é.txt")));
+            println("cloned file: " + await file.isSameEntry(structuredClone(file)));
+            println("cloned directory: " + await dir.isSameEntry(structuredClone(dir)));
+            println("different entries: " + await file.isSameEntry(dir));
+            println("resolve: " + JSON.stringify(await directory.resolve(file)));
+            println("resolve self: " + JSON.stringify(await dir.resolve(dir)));
+            println("resolve ancestor: " + JSON.stringify(await dir.resolve(root)));
+
+            await dir.getDirectoryHandle("nested", { create: true });
+            const entries = [];
+            for await (const [name, handle] of dir.entries())
+                entries.push(name + " " + handle.kind);
+            println("entries: " + entries.sort().join(", "));
+
+            const keys = [];
+            for await (const key of dir.keys())
+                keys.push(key);
+            println("keys: " + keys.sort().join(", "));
+
+            const values = [];
+            for await (const handle of dir.values())
+                values.push(handle.name);
+            println("values: " + values.sort().join(", "));
+            println("default iterator: " + (dir[Symbol.asyncIterator] === dir.entries));
+            for await (const [name, handle] of dir) {
+                println("entry name matches handle: " + (name === handle.name));
+                break;
+            }
+
+            println("file as directory: " + await rejectionName(() => dir.getDirectoryHandle("é.txt")));
+            println("directory as file: " + await rejectionName(() => dir.getFileHandle("nested", { create: true })));
+            println("missing file: " + await rejectionName(() => dir.getFileHandle("missing")));
+            for (const name of ["", ".", "..", "a/b"])
+                println("invalid name " + JSON.stringify(name) + ": " + await rejectionName(() => dir.getFileHandle(name, { create: true })));
+            println("nonrecursive removal: " + await rejectionName(() => directory.removeEntry(".0_chat")));
+
+            await directory.removeEntry(".0_chat", { recursive: true });
+            println("removed file handle: " + await rejectionName(() => file.getFile()));
+            println("removed directory: " + await rejectionName(() => directory.getDirectoryHandle(".0_chat")));
+        } finally {
+            await root.removeEntry(directoryName, { recursive: true });
+        }
+    });
+</script>

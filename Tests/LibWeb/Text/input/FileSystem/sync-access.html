@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<script src="../include.js"></script>
+<script type="text/plain" id="worker-source">
+let access;
+self.onmessageerror = () => postMessage({ error: "The worker could not deserialize the request" });
+
+self.onmessage = async ({ data: { command, name, handle } }) => {
+    try {
+        if (command === "truncate and close") {
+            access.truncate(2);
+            access.flush();
+            access.close();
+            access.close();
+            let closed = "succeeded";
+            try {
+                access.getSize();
+            } catch (error) {
+                closed = error.name;
+            }
+            postMessage({ closed });
+            return;
+        }
+
+        const root = await navigator.storage.getDirectory();
+        const file = await (await root.getDirectoryHandle(name)).getFileHandle("test");
+        try {
+            access = await file.createSyncAccessHandle();
+        } catch (error) {
+            postMessage({ contended: error.name });
+            return;
+        }
+
+        let contended = "resolved";
+        try {
+            (await file.createSyncAccessHandle()).close();
+        } catch (error) {
+            contended = error.name;
+        }
+
+        const written = access.write(Uint8Array.of(65, 66), { at: 0 });
+        access.write(Uint8Array.of(68), { at: 3 });
+        access.flush();
+        const output = new Uint8Array([255, 255, 255, 255, 255]);
+        const read = access.read(new DataView(output.buffer, 1, 2), { at: 1 });
+        const sequential = new Uint8Array(1);
+        access.read(sequential);
+        postMessage({
+            type: access instanceof FileSystemSyncAccessHandle,
+            sameEntry: await file.isSameEntry(handle),
+            contended,
+            written,
+            size: access.getSize(),
+            read,
+            bytes: [...output].join(","),
+            sequential: sequential[0],
+        });
+    } catch (error) {
+        access?.close();
+        postMessage({ error: error.name + ": " + error.message });
+    }
+};
+</script>
+<script>
+    async function rejectionName(operation) {
+        try {
+            await operation();
+            return "resolved";
+        } catch (error) {
+            return error.name;
+        }
+    }
+
+    promiseTest(async () => {
+        const root = await navigator.storage.getDirectory();
+        const name = "opfs-sync-" + uniqueID();
+        const dir = await root.getDirectoryHandle(name, { create: true });
+        const file = await dir.getFileHandle("test", { create: true });
+
+        const workerURL = URL.createObjectURL(new Blob([document.getElementById("worker-source").textContent], {
+            type: "text/javascript",
+        }));
+        const worker = new Worker(workerURL);
+        let result;
+        function request(command) {
+            return new Promise((resolve, reject) => {
+                worker.onmessage = ({ data }) => {
+                    if (data.error)
+                        reject(new Error(data.error));
+                    else
+                        resolve(data);
+                };
+                worker.onerror = error => reject(new Error(error.message || "Worker script failed to load"));
+                worker.onmessageerror = () => reject(new Error("The window could not deserialize the worker reply"));
+                worker.postMessage({ command, name, handle: file });
+            });
+        }
+
+        try {
+            result = await request("open and write");
+            println("worker handle: " + result.type);
+            println("same entry after posting handle: " + result.sameEntry);
+            println("exclusive contention: " + result.contended);
+            println("sync bytes written: " + result.written);
+            println("sync size: " + result.size);
+            println("sync view read: " + result.read + " " + result.bytes);
+            println("sync sequential read: " + result.sequential);
+            println("writable blocked by sync: " + await rejectionName(() => file.createWritable()));
+            println("recursive removal blocked: " + await rejectionName(() => root.removeEntry(name, { recursive: true })));
+            println("window sees flushed bytes: " + [...new Uint8Array(await (await file.getFile()).arrayBuffer())].join(","));
+
+            result = await request("truncate and close");
+            println("closed sync handle: " + result.closed);
+            println("window sees truncation: " + await (await file.getFile()).text());
+
+            const stream = await file.createWritable({ keepExistingData: true });
+            result = await request("open and write");
+            println("sync blocked by writable: " + result.contended);
+            await stream.close();
+        } finally {
+            worker.terminate();
+            URL.revokeObjectURL(workerURL);
+            await root.removeEntry(name, { recursive: true });
+        }
+    });
+</script>

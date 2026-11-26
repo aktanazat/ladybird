@@ -1,0 +1,13 @@
+writable subclass: true
+window sync method: undefined
+file size before commit: 0
+file metadata: true
+bytes: 97,66,99,68,0,70,0
+original snapshot: 0
+keep existing: aBcD
+abort preserves committed bytes: aBcD
+writer locks stream: true
+writer commits: ok
+pipe commits: pipe
+missing position: TypeError
+wide offset: QuotaExceededError

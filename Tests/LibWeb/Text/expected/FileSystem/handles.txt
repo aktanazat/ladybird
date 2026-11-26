@@ -1,0 +1,26 @@
+root: true directory ""
+same root: true
+window sync handle: undefined
+file: true file é.txt
+same file: true
+cloned file: true
+cloned directory: true
+different entries: false
+resolve: [".0_chat","é.txt"]
+resolve self: []
+resolve ancestor: null
+entries: nested directory, é.txt file
+keys: nested, é.txt
+values: nested, é.txt
+default iterator: true
+entry name matches handle: true
+file as directory: TypeMismatchError
+directory as file: TypeMismatchError
+missing file: NotFoundError
+invalid name "": TypeError
+invalid name ".": TypeError
+invalid name "..": TypeError
+invalid name "a/b": TypeError
+nonrecursive removal: InvalidModificationError
+removed file handle: NotFoundError
+removed directory: NotFoundError
