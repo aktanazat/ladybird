@@ -251,6 +251,48 @@ Optional<String> Host::registrable_domain() const
     return registrable_domain;
 }
 
+static bool ends_with_dot_prefixed_suffix(StringView string, StringView suffix)
+{
+    return string.length() > suffix.length() && string.ends_with(suffix) && string[string.length() - suffix.length() - 1] == '.';
+}
+
+// https://html.spec.whatwg.org/multipage/browsers.html#is-a-registrable-domain-suffix-of-or-is-equal-to
+bool Host::is_a_registrable_domain_suffix_of_or_is_equal_to(Host const& original_host) const
+{
+    // 4. If hostSuffix does not equal originalHost, then:
+    if (*this != original_host) {
+        // 1. If hostSuffix or originalHost is not a domain, then return false.
+        // NOTE: This excludes hosts that are IP addresses.
+        if (!has<String>() || !original_host.has<String>())
+            return false;
+        auto host_suffix_string = get<String>().bytes_as_string_view();
+        auto original_host_string = original_host.get<String>().bytes_as_string_view();
+
+        // 2. If hostSuffix, prefixed by U+002E (.), does not match the end of originalHost, then return false.
+        if (!ends_with_dot_prefixed_suffix(original_host_string, host_suffix_string))
+            return false;
+
+        // 3. If any of the following are true:
+        //     * hostSuffix equals hostSuffix's public suffix; or
+        //     * hostSuffix, prefixed by U+002E (.), matches the end of originalHost's public suffix,
+        //    then return false. [URL]
+        if (get<String>() == public_suffix())
+            return false;
+
+        auto original_host_public_suffix = original_host.public_suffix();
+        VERIFY(original_host_public_suffix.has_value());
+
+        if (ends_with_dot_prefixed_suffix(original_host_public_suffix->bytes_as_string_view(), host_suffix_string))
+            return false;
+
+        // 4. Assert: originalHost's public suffix, prefixed by U+002E (.), matches the end of hostSuffix.
+        VERIFY(ends_with_dot_prefixed_suffix(host_suffix_string, original_host_public_suffix->bytes_as_string_view()));
+    }
+
+    // 5. Return true.
+    return true;
+}
+
 extern "C" void url_rust_registrable_domain(u8 const* domain, size_t domain_length, void* ctx, void (*on_success)(void*, u8 const*, size_t));
 
 extern "C" void url_rust_registrable_domain(u8 const* domain, size_t domain_length, void* ctx, void (*on_success)(void*, u8 const*, size_t))

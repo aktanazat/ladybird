@@ -161,3 +161,31 @@ TEST_CASE(public_suffix_matching_for_ip_addresses)
         EXPECT_EQ(host->registrable_domain(), OptionalNone {});
     }
 }
+
+TEST_CASE(registrable_domain_suffix_of_or_equal_to)
+{
+    struct TestCase {
+        StringView host_suffix;
+        StringView original_host;
+        bool expected;
+    };
+
+    // s3.amazonaws.com is a public suffix: a page on bucket.s3.amazonaws.com may not claim amazonaws.com.
+    static constexpr auto test_cases = to_array<TestCase>({
+        { "example.com"sv, "example.com"sv, true },
+        { "example.com"sv, "login.example.com"sv, true },
+        { "login.example.com"sv, "example.com"sv, false },
+        { "com"sv, "example.com"sv, false },
+        { "ample.com"sv, "example.com"sv, false },
+        { "bucket.s3.amazonaws.com"sv, "bucket.s3.amazonaws.com"sv, true },
+        { "s3.amazonaws.com"sv, "bucket.s3.amazonaws.com"sv, false },
+        { "amazonaws.com"sv, "bucket.s3.amazonaws.com"sv, false },
+    });
+
+    for (auto const& test_case : test_cases) {
+        auto host_suffix = URL::Parser::parse_host(test_case.host_suffix);
+        auto original_host = URL::Parser::parse_host(test_case.original_host);
+        VERIFY(host_suffix.has_value() && original_host.has_value());
+        EXPECT_EQ(host_suffix->is_a_registrable_domain_suffix_of_or_is_equal_to(*original_host), test_case.expected);
+    }
+}

@@ -49,6 +49,9 @@ public:
 
     Optional<String> public_suffix() const;
     Optional<String> registrable_domain() const;
+    // https://html.spec.whatwg.org/multipage/browsers.html#is-a-registrable-domain-suffix-of-or-is-equal-to, with this
+    // host as hostSuffix.
+    bool is_a_registrable_domain_suffix_of_or_is_equal_to(Host const& original_host) const;
 
     String serialize() const;
 

@@ -1890,21 +1890,12 @@ static Optional<String> relying_party_id(URL::Origin const& origin, Optional<Str
     if (!requested_rp.has_value())
         return effective_domain;
 
+    // The RP ID is the effective domain or a registrable domain suffix of it, as HTML defines one: never a public
+    // suffix, nor a domain that ends the caller's public suffix (amazonaws.com for a page on *.s3.amazonaws.com).
     auto rp = URL::Parser::parse_host(Utf16String::from_utf8(*requested_rp));
-    if (!rp.has_value() || !rp->has<String>())
+    if (!rp.has_value() || !rp->has<String>() || !rp->is_a_registrable_domain_suffix_of_or_is_equal_to(origin.host()))
         return {};
-    auto const& domain = rp->get<String>();
-    if (domain == effective_domain)
-        return domain;
-
-    auto domain_view = domain.bytes_as_string_view();
-    auto effective = effective_domain.bytes_as_string_view();
-    if (!effective.ends_with(domain_view) || effective.length() <= domain_view.length()
-        || effective[effective.length() - domain_view.length() - 1] != '.')
-        return {};
-    if (!rp->registrable_domain().has_value())
-        return {};
-    return domain;
+    return rp->get<String>();
 }
 
 static WebAuthentication::Requirement webauthn_requirement(Optional<String const&> value)
