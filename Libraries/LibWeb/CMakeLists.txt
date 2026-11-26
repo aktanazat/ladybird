@@ -319,6 +319,10 @@ set(SOURCES
     Fetch/Request.cpp
     Fetch/Response.cpp
     FileAPI/Blob.cpp
+    FileSystem/FileSystemDirectoryHandle.cpp
+    FileSystem/FileSystemDirectoryHandleAsyncIterator.cpp
+    FileSystem/FileSystemFileHandle.cpp
+    FileSystem/FileSystemHandle.cpp
     FileAPI/BlobURLStore.cpp
     FileAPI/File.cpp
     FileAPI/FileList.cpp

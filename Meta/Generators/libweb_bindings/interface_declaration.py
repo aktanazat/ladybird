@@ -186,6 +186,9 @@ private:
         out.write("    JS_DECLARE_NATIVE_FUNCTION(keys);\n")
         out.write("    JS_DECLARE_NATIVE_FUNCTION(values);\n")
     if interface.async_iterable is not None:
+        if interface.async_iterable.key_type is not None:
+            out.write("    JS_DECLARE_NATIVE_FUNCTION(entries);\n")
+            out.write("    JS_DECLARE_NATIVE_FUNCTION(keys);\n")
         out.write("    JS_DECLARE_NATIVE_FUNCTION(values);\n")
     out.write(
         """};

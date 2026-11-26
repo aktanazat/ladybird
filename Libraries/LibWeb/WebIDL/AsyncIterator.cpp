@@ -73,20 +73,8 @@ JS::ThrowCompletionOr<GC::Ptr<JS::Object>> AsyncIterator::iterator_next_impl()
                 // 2. Return CreateIteratorResultObject(undefined, true).
                 return JS::create_iterator_result_object(realm, JS::js_undefined(), true);
             }
-            // FIXME: 2. Otherwise, if interface has a pair asynchronously iterable declaration:
-            else if (false) {
-                // 1. Assert: next is a value pair.
-                // 2. Return the iterator result for next and kind.
-            }
-            // Otherwise:
-            else {
-                // 1. Assert: interface has a value asynchronously iterable declaration.
-                // 2. Assert: next is a value of the type that appears in the declaration.
-
-                // 3. Let value be next, converted to a JavaScript value.
-                // 4. Return CreateIteratorResultObject(value, false).
-                return JS::create_iterator_result_object(realm, next, false);
-            }
+            // The interface supplies the JavaScript value for this iterator's kind.
+            return JS::create_iterator_result_object(realm, next, false);
         });
 
         // 6. Let onFulfilled be CreateBuiltinFunction(fulfillSteps, « »).

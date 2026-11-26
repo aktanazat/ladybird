@@ -47,6 +47,7 @@
 #include <LibWeb/DOM/RequestFullscreenError.h>
 #include <LibWeb/Editing/SpellingMarkers.h>
 #include <LibWeb/Export.h>
+#include <LibWebCommon/StorageAPI/OriginPrivateFileSystem.h>
 #include <LibWeb/Forward.h>
 #include <LibWeb/Geolocation/Geolocation.h>
 #include <LibWeb/Geolocation/GeolocationCoordinates.h>
@@ -936,6 +937,8 @@ public:
     virtual void page_did_store_hsts_policy_for_testing(String const&, HTTP::HSTS::ParsedHSTSPolicy const&) { }
     virtual void page_did_request_clear_storage_for_testing(StorageAPI::StorageEndpointType, HTML::EnvironmentSettingsObject const&) { }
     virtual bool page_did_is_known_hsts_host(String const&) { return false; }
+    virtual FileSystem::Reply request_origin_private_file_system(HTML::EnvironmentId const&, FileSystem::Request const&) { return {}; }
+
     virtual u64 page_did_request_storage_usage([[maybe_unused]] Web::HTML::EnvironmentId const& environment_id) { return {}; }
 
     virtual URL::BlobURLEntry::Token page_did_add_blob_url_entry(HTML::EnvironmentSettingsObject const&, [[maybe_unused]] Utf16String const& url, [[maybe_unused]] FileAPI::SerializedBlobURLEntry const& entry) { return 0; }

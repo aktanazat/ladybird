@@ -91,11 +91,13 @@ def define_the_async_iterable_declaration(
     if interface.async_iterable is None:
         return
 
+    pair = interface.async_iterable.key_type is not None
+    length = parameter_list_length(interface.async_iterable.parameters)
+    for name in ("entries", "keys", "values") if pair else ("values",):
+        out.write(f"    object.define_native_function(realm, vm.names.{name}, {name}, {length}, default_attributes);\n")
+    iterator = "entries" if pair else "values"
     out.write(
-        f"""    object.define_native_function(realm, vm.names.values, values, {parameter_list_length(interface.async_iterable.parameters)}, default_attributes);
-    object.define_direct_property(vm.well_known_symbol_async_iterator(), object.get_without_side_effects(vm.names.values), JS::Attribute::Configurable | JS::Attribute::Writable);
-
-"""
+        f"    object.define_direct_property(vm.well_known_symbol_async_iterator(), object.get_without_side_effects(vm.names.{iterator}), JS::Attribute::Configurable | JS::Attribute::Writable);\n\n"
     )
 
 
@@ -320,9 +322,6 @@ def write_async_iterable_declaration_functions(
 ) -> None:
     if interface.async_iterable is None:
         return
-    if interface.async_iterable.key_type is not None:
-        raise RuntimeError(f"Unsupported pair async iterable declaration on '{interface.name}'")
-
     includes.add("LibWeb/WebIDL/ExceptionOrUtils.h")
     includes.add(async_iterator_implementation_header_for_interface(interface))
 
@@ -330,34 +329,40 @@ def write_async_iterable_declaration_functions(
     if "ImplementedInBindings" in interface.async_iterable.extended_attributes:
         includes.add(bindings_glue_header_for_interface(interface))
 
-    out.write(
-        f"""JS_DEFINE_NATIVE_FUNCTION({interface.prototype_class}::values)
+    members = [("values", "Value")]
+    if interface.async_iterable.key_type is not None:
+        add_header_includes_for_idl_type(interface.async_iterable.key_type, includes, context)
+        members = [("entries", "KeyAndValue"), ("keys", "Key"), *members]
+
+    for name, kind in members:
+        out.write(
+            f"""JS_DEFINE_NATIVE_FUNCTION({interface.prototype_class}::{name})
 {{
     [[maybe_unused]] auto& realm = *vm.current_realm();
     auto this_value = vm.this_value();
     if (this_value.is_nullish())
         this_value = &realm.global_object();
-    auto* impl = TRY(impl_from(vm, this_value, u"values"sv, HTML::SecurityCheckType::Method));
+    auto* impl = TRY(impl_from(vm, this_value, u"{name}"sv, HTML::SecurityCheckType::Method));
     [[maybe_unused]] auto& this_object_realm = this_value.as_object().shape().realm();
 
 """
-    )
-    write_operation_parameter_conversions(out, interface.async_iterable.parameters, includes, context)
+        )
+        write_operation_parameter_conversions(out, interface.async_iterable.parameters, includes, context)
 
-    arguments = ", ".join(idl_identifier_cpp_name(parameter) for parameter in interface.async_iterable.parameters)
-    if arguments:
-        arguments = f", {arguments}"
+        arguments = ", ".join(idl_identifier_cpp_name(parameter) for parameter in interface.async_iterable.parameters)
+        if arguments:
+            arguments = f", {arguments}"
 
-    create_iterator = f"{fully_qualified_name_for_interface(interface)}AsyncIterator::create(this_object_realm, JS::Object::PropertyKind::Value, *impl"
-    if "ImplementedInBindings" in interface.async_iterable.extended_attributes:
-        create_iterator = "Web::Bindings::values(this_object_realm, *impl"
+        create_iterator = f"{fully_qualified_name_for_interface(interface)}AsyncIterator::create(this_object_realm, JS::Object::PropertyKind::{kind}, *impl"
+        if "ImplementedInBindings" in interface.async_iterable.extended_attributes:
+            create_iterator = f"Web::Bindings::{name}(this_object_realm, *impl"
 
-    out.write(
-        f"""    return TRY(WebIDL::throw_dom_exception_if_needed(vm, realm, [&] {{ return {create_iterator}{arguments}); }}));
+        out.write(
+            f"""    return TRY(WebIDL::throw_dom_exception_if_needed(vm, realm, [&] {{ return {create_iterator}{arguments}); }}));
 }}
 
 """
-    )
+        )
 
 
 def write_async_iterator_prototype_implementation(

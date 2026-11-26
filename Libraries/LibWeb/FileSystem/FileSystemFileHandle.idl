@@ -1,0 +1,6 @@
+// https://fs.spec.whatwg.org/#api-filesystemfilehandle
+
+[Exposed=(Window,Worker), SecureContext]
+interface FileSystemFileHandle : FileSystemHandle {
+    Promise<File> getFile();
+};

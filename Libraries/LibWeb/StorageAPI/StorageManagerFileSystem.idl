@@ -1,0 +1,6 @@
+// https://fs.spec.whatwg.org/#accessing-the-bucket-file-system
+
+[SecureContext]
+partial interface StorageManager {
+    Promise<FileSystemDirectoryHandle> getDirectory();
+};

@@ -1,0 +1,9 @@
+// https://fs.spec.whatwg.org/#api-filesystemhandle
+enum FileSystemHandleKind { "file", "directory" };
+
+[Exposed=(Window,Worker), SecureContext]
+interface FileSystemHandle {
+    readonly attribute FileSystemHandleKind kind;
+    readonly attribute USVString name;
+    Promise<boolean> isSameEntry(FileSystemHandle other);
+};

@@ -8,6 +8,8 @@
 
 //! StorageManager, https://storage.spec.whatwg.org/#storagemanager
 
+use core::ffi::c_void;
+
 use libjs_rust::api::{Gc, Object, PropertyKey, Realm, Trace, Value, Vm};
 
 use crate::bindings::conversions::ToJs;
@@ -18,11 +20,15 @@ use crate::bindings::interface::{
     with_temporary_execution_context_and_callbacks,
 };
 use crate::bindings::promise::{
-    TaskSource, WebIdlPromise, create_promise, in_parallel, promise_realm, queue_a_global_task,
+    TaskSource, WebIdlPromise, create_promise, in_parallel, promise_from_abi, promise_realm, queue_a_global_task,
     reject_promise_with_exception, resolve_promise,
 };
 use crate::bindings::{CallContext, Exception, WebIdlResult};
 use crate::storage_api::storage_shelf::obtain_a_local_storage_shelf;
+
+unsafe extern "C" {
+    fn web_storage_api_get_directory(settings: *mut c_void) -> *mut c_void;
+}
 
 /// The dictionary StorageEstimate of StorageAPI/StorageManager.idl.
 pub(crate) struct StorageEstimate {
@@ -53,6 +59,13 @@ fn queue_a_storage_task<C: Trace + Copy + 'static>(vm: &Vm, global: Gc<Object>, 
 impl StorageManager {
     pub(crate) fn create(vm: &Vm, realm: Gc<Realm>) -> Ref<StorageManager> {
         allocate(vm, |_| StorageManager { realm })
+    }
+
+    // https://fs.spec.whatwg.org/#dom-storagemanager-getdirectory
+    pub(crate) fn get_directory(&self, _: &mut CallContext) -> WebIdlResult<WebIdlPromise> {
+        let settings = relevant_settings_object(relevant_global_object(self));
+        // SAFETY: The receiver's settings object is live and LibWeb returns a live promise capability.
+        Ok(unsafe { promise_from_abi(web_storage_api_get_directory(settings.as_ptr())) })
     }
 
     // https://storage.spec.whatwg.org/#dom-storagemanager-estimate
