@@ -23,6 +23,8 @@ STORAGE_IDENTIFIERS = (
     "DOMRect",
     "DOMRectReadOnly",
     "File",
+    "FileSystemDirectoryHandle",
+    "FileSystemFileHandle",
     "FileList",
     "ImageBitmap",
     "ImageData",
@@ -34,7 +36,8 @@ STORAGE_IDENTIFIERS = (
 IPC_ONLY_INTERFACES = ("Memory", "RTCEncodedAudioFrame")
 
 # The serializable interfaces implemented in C++ whose steps run in Rust.
-CPP_INTERFACES_WITH_RUST_STEPS = ("DOMException", "QuotaExceededError", "RTCEncodedAudioFrame")
+FILE_SYSTEM_HANDLES = ("FileSystemDirectoryHandle", "FileSystemFileHandle")
+CPP_INTERFACES_WITH_RUST_STEPS = ("DOMException", "QuotaExceededError", "RTCEncodedAudioFrame", *FILE_SYSTEM_HANDLES)
 
 
 def write_rust_serializable_dispatch(out: TextIO, interfaces: List[Interface], values: Dict[str, int]) -> None:
@@ -136,7 +139,8 @@ pub(crate) mod serializable_objects {
 """
     )
     for name in CPP_INTERFACES_WITH_RUST_STEPS:
-        out.write(f"            {values[name]} => SerializableSteps::{name},\n")
+        steps = "FileSystemHandle" if name in FILE_SYSTEM_HANDLES else name
+        out.write(f"            {values[name]} => SerializableSteps::{steps},\n")
     for interface in rust_interfaces:
         out.write(f"            {values[interface.name]} => SerializableSteps::Rust,\n")
     out.write(

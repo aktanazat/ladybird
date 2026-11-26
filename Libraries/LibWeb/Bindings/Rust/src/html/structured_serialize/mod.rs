@@ -1049,6 +1049,13 @@ impl<'memory> Serializer<'_, '_, 'memory> {
                             self.for_storage,
                         )?;
                     }
+                    #[cfg(web_idl_bindings)]
+                    SerializableSteps::FileSystemHandle => {
+                        crate::file_system::serialization::serialization_steps(
+                            object,
+                            &mut SerializationWriter::new(self),
+                        )?;
+                    }
                     SerializableSteps::Rust => {
                         let realm = self.realm.expect("an object is serialized in a realm");
                         serializable::serialization_steps(
@@ -1663,6 +1670,12 @@ impl Deserializer<'_, '_, '_> {
                             &mut SerializationReader::new(self),
                         )?)
                     }
+                    #[cfg(web_idl_bindings)]
+                    SerializableSteps::FileSystemHandle => crate::file_system::serialization::deserialization_steps(
+                        realm,
+                        interface_name,
+                        &mut SerializationReader::new(self),
+                    )?,
                     SerializableSteps::Rust => serializable::deserialization_steps(
                         interface_name,
                         self.cx,

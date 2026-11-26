@@ -23,6 +23,8 @@ pub(crate) enum SerializableSteps {
     DOMException,
     QuotaExceededError,
     RTCEncodedAudioFrame,
+    #[cfg(web_idl_bindings)]
+    FileSystemHandle,
 }
 
 // The version after every serializable object's interface identifier in a storage record. Changing it requires

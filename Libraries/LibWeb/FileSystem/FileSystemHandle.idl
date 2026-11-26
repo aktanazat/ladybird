@@ -1,7 +1,7 @@
 // https://fs.spec.whatwg.org/#api-filesystemhandle
 enum FileSystemHandleKind { "file", "directory" };
 
-[Exposed=(Window,Worker), SecureContext]
+[Exposed=(Window,Worker), SecureContext, Serializable]
 interface FileSystemHandle {
     readonly attribute FileSystemHandleKind kind;
     readonly attribute USVString name;

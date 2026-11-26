@@ -8,3 +8,4 @@
 
 pub(crate) mod file_system_sync_access_handle;
 pub(crate) mod file_system_writable_file_stream;
+pub(crate) mod serialization;
