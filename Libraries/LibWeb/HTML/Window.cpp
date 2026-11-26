@@ -94,6 +94,7 @@
 #include <LibWeb/Selection/Selection.h>
 #include <LibWeb/Speech/SpeechSynthesis.h>
 #include <LibWeb/ViewTransition/ViewTransition.h>
+#include <LibWeb/WebDriver/BiDi/Script.h>
 #include <LibWeb/WebIDL/AbstractOperations.h>
 #include <LibWeb/WebIDL/ExceptionOrUtils.h>
 #include <LibWeb/WebIDL/Promise.h>
@@ -169,9 +170,9 @@ JS::HostObject& platform_object_for_window(HTML::Window& window, JS::Realm& real
     auto& wrapper_world = Bindings::host_defined_wrapper_world(realm);
     // NB: Window is a [Global] interface: its members live on its global object, so a wrapper of another Window made
     //     in a sandbox world would have none (no postMessage on frames[0] or parent). A sandbox reaches another
-    //     frame's window through that window's own global, as a script of a same-origin frame does.
-    if (!wrapper_world.is_main_world())
-        return platform_object_for_window(window);
+    //     frame's window as the global of that frame's sandbox of the same name.
+    if (auto* sandbox_global = WebDriver::BiDi::sandbox_global_for_window(realm, window))
+        return *as_platform_object(*sandbox_global);
     return *Bindings::wrap(wrapper_world, realm, GC::Ref { window });
 }
 

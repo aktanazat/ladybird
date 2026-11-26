@@ -38,6 +38,9 @@ Optional<String> sandbox_realm_id(HTML::EnvironmentSettingsObject&);
 HTML::EnvironmentSettingsObject* sandbox_settings_with_realm_id(DOM::Document&, StringView);
 void unload_sandbox_realms(DOM::Document&, Function<void(HTML::EnvironmentSettingsObject&)> const& on_destroyed);
 void clear_all_sandbox_realms();
+// Another frame's window seen from a sandbox realm: the global of that frame's sandbox of the same name; none when
+// from_realm is no sandbox.
+JS::Object* sandbox_global_for_window(JS::Realm& from_realm, HTML::Window&);
 
 // https://w3c.github.io/webdriver-bidi/#get-the-realm-info
 Optional<JsonObject> get_the_realm_info(HTML::EnvironmentSettingsObject&);

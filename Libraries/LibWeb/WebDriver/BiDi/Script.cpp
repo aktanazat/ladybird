@@ -230,6 +230,16 @@ static SandboxSettings& get_or_create_sandbox_realm(DOM::Document& document, Str
     return *sandbox;
 }
 
+// NB: A sandbox reaches another frame's window as that frame's sandbox of the same name, as a script there would see
+//     it, so it writes to no page's globals and reads no page's objects.
+JS::Object* sandbox_global_for_window(JS::Realm& from_realm, HTML::Window& window)
+{
+    auto* settings = sandbox_settings(from_realm);
+    if (!settings)
+        return nullptr;
+    return &get_or_create_sandbox_realm(window.associated_document(), settings->name).realm().global_object();
+}
+
 // https://w3c.github.io/webdriver-bidi/#get-the-realm-info
 Optional<JsonObject> get_the_realm_info(HTML::EnvironmentSettingsObject& environment_settings)
 {
