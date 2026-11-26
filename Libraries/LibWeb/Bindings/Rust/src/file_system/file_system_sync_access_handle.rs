@@ -63,7 +63,13 @@ impl FileSystemSyncAccessHandle {
         Ok(())
     }
 
-    fn command(&self, operation: Operation, offset: u64, data: &[u8], target: Option<&mut ReadTarget>) -> WebIdlResult<u64> {
+    fn command(
+        &self,
+        operation: Operation,
+        offset: u64,
+        data: &[u8],
+        target: Option<&mut ReadTarget>,
+    ) -> WebIdlResult<u64> {
         let (length, destination, receive) = match target {
             Some(target) => (
                 target.extent.byte_length as u64,
@@ -75,22 +81,44 @@ impl FileSystemSyncAccessHandle {
         let mut value = 0;
         // SAFETY: The cell is a live FileSystemOpenFile. The inputs and optional read target are lent for the call.
         let status = unsafe {
-            web_file_system_sync_command(self.file.as_ptr(), operation as u8, offset, length, ak::Span::new(data), &mut value, destination, receive)
+            web_file_system_sync_command(
+                self.file.as_ptr(),
+                operation as u8,
+                offset,
+                length,
+                ak::Span::new(data),
+                &mut value,
+                destination,
+                receive,
+            )
         };
         match status {
             0 => Ok(value),
-            1 => Err(Exception::Dom("QuotaExceededError", Utf16String::from_utf8("The file exceeds the origin private file system's size limit"))),
+            1 => Err(Exception::Dom(
+                "QuotaExceededError",
+                Utf16String::from_utf8("The file exceeds the origin private file system's size limit"),
+            )),
             _ => Err(invalid_state()),
         }
     }
 
     // https://fs.spec.whatwg.org/#dom-filesystemsyncaccesshandle-read
-    pub(crate) fn read(&self, _: &mut CallContext, buffer: AllowSharedBufferSource, options: FileSystemReadWriteOptions) -> WebIdlResult<u64> {
+    pub(crate) fn read(
+        &self,
+        _: &mut CallContext,
+        buffer: AllowSharedBufferSource,
+        options: FileSystemReadWriteOptions,
+    ) -> WebIdlResult<u64> {
         self.ensure_open()?;
         let buffer = BufferSource::from(buffer);
-        let mut target = ReadTarget { extent: buffer.extent(), read: 0 };
+        let mut target = ReadTarget {
+            extent: buffer.extent(),
+            read: 0,
+        };
         if target.extent.is_out_of_bounds || target.extent.buffer.is_detached() {
-            return Err(Exception::type_error("The destination buffer is detached or out of bounds"));
+            return Err(Exception::type_error(
+                "The destination buffer is detached or out of bounds",
+            ));
         }
 
         // Read starting at the supplied position or the file cursor. The broker clamps reads at EOF.
@@ -101,7 +129,12 @@ impl FileSystemSyncAccessHandle {
     }
 
     // https://fs.spec.whatwg.org/#dom-filesystemsyncaccesshandle-write
-    pub(crate) fn write(&self, _: &mut CallContext, buffer: AllowSharedBufferSource, options: FileSystemReadWriteOptions) -> WebIdlResult<u64> {
+    pub(crate) fn write(
+        &self,
+        _: &mut CallContext,
+        buffer: AllowSharedBufferSource,
+        options: FileSystemReadWriteOptions,
+    ) -> WebIdlResult<u64> {
         self.ensure_open()?;
         let buffer = BufferSource::from(buffer);
         // SAFETY: Only native memory is allocated while copying the bytes.
@@ -144,7 +177,10 @@ impl FileSystemSyncAccessHandle {
 }
 
 fn invalid_state() -> Exception {
-    Exception::Dom("InvalidStateError", Utf16String::from_utf8("The sync access handle is unavailable"))
+    Exception::Dom(
+        "InvalidStateError",
+        Utf16String::from_utf8("The sync access handle is unavailable"),
+    )
 }
 
 struct ReadTarget {
@@ -171,7 +207,11 @@ unsafe extern "C" fn receive_bytes(destination: *mut c_void, bytes: ak::Span<'_,
 ///
 /// `file` is a live C++ FileSystemOpenFile in the given realm.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn web_rust_file_system_create_sync_access_handle(vm: &Vm, realm: Gc<Realm>, file: *mut c_void) -> *mut Object {
+pub unsafe extern "C" fn web_rust_file_system_create_sync_access_handle(
+    vm: &Vm,
+    realm: Gc<Realm>,
+    file: *mut c_void,
+) -> *mut Object {
     // SAFETY: The caller passes a live cell.
     let file = unsafe { CppCell::from_raw(file) };
     let cx = CallContext::new(vm, realm);

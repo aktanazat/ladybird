@@ -40,27 +40,26 @@ void FileSystemDirectoryHandleAsyncIterator::visit_edges(GC::Cell::Visitor& visi
 // https://fs.spec.whatwg.org/#directory-iteration
 GC::Ref<WebIDL::Promise> FileSystemDirectoryHandleAsyncIterator::next_iteration_result(JS::Realm&)
 {
-    // On the storage queue, locate the directory and find a child not in past results.
+    // On the storage queue, locate the directory and find the next child in name order.
+    // The cursor excludes all past results, including entries recreated during iteration.
     auto convert = GC::create_function(heap(), GC::captures(*this), [](auto& self, Reply& reply) -> JS::Value {
         auto& realm = self.promise_realm();
-        for (auto const& child : reply.entries) {
-            if (self.m_past_results.set(child.name) != AK::HashSetResult::InsertedNewEntry)
-                continue;
-
-            // Append the name to past results and return the key, handle, or key-handle pair.
-            auto name = JS::PrimitiveString::create(realm.vm(), Utf16String::from_utf8(child.name));
-            if (self.iteration_kind() == JS::Object::PropertyKind::Key)
-                return name;
-            auto handle = self.m_directory->child_handle(child.name, child.is_directory);
-            auto wrapper = Bindings::wrap(Bindings::host_defined_wrapper_world(realm), realm, handle);
-            if (self.iteration_kind() == JS::Object::PropertyKind::Value)
-                return wrapper;
-            return JS::Array::create_from(realm, { name, wrapper });
-        }
         // If no unvisited children remain, signal the end of iteration.
-        return JS::js_special_empty_value();
+        if (reply.entries.is_empty())
+            return JS::js_special_empty_value();
+
+        auto const& child = reply.entries.first();
+        self.m_last_name = child.name;
+        auto name = JS::PrimitiveString::create(realm.vm(), Utf16String::from_utf8(child.name));
+        if (self.iteration_kind() == JS::Object::PropertyKind::Key)
+            return name;
+        auto handle = self.m_directory->child_handle(child.name, child.is_directory);
+        auto wrapper = Bindings::wrap(Bindings::host_defined_wrapper_world(realm), realm, handle);
+        if (self.iteration_kind() == JS::Object::PropertyKind::Value)
+            return wrapper;
+        return JS::Array::create_from(realm, { name, wrapper });
     });
-    return m_directory->run_operation({ Operation::List, m_directory->path() }, convert);
+    return m_directory->run_operation({ Operation::List, m_directory->path(), m_last_name }, convert);
 }
 
 }

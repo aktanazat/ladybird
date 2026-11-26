@@ -280,7 +280,11 @@ impl WritableStream {
         }
 
         // 2. Return ! WritableStreamAbort(this, reason).
-        Ok(writable_stream_abort(cx, self.stream_ref(), reason.unwrap_or(Value::UNDEFINED)))
+        Ok(writable_stream_abort(
+            cx,
+            self.stream_ref(),
+            reason.unwrap_or(Value::UNDEFINED),
+        ))
     }
 
     // https://streams.spec.whatwg.org/#ws-close

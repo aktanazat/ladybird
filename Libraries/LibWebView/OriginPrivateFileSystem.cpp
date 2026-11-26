@@ -66,7 +66,7 @@ ErrorOr<NonnullOwnPtr<OriginPrivateFileSystem>> OriginPrivateFileSystem::create(
     Statements statements {
         TRY(database->prepare_statement("SELECT directory FROM Entries WHERE bucket = ? AND path = ?;"sv)),
         TRY(database->prepare_statement("INSERT INTO Entries VALUES (?, ?, ?, ?, ?, X'', ?);"sv)),
-        TRY(database->prepare_statement("SELECT name, directory FROM Entries WHERE bucket = ? AND parent = ? ORDER BY path;"sv)),
+        TRY(database->prepare_statement("SELECT name, directory FROM Entries WHERE bucket = ? AND parent = ? AND path > ? ORDER BY path LIMIT 1;"sv)),
         TRY(database->prepare_statement("SELECT 1 FROM Entries WHERE bucket = ? AND parent = ? LIMIT 1;"sv)),
         TRY(database->prepare_statement("DELETE FROM Entries WHERE bucket = ? AND (path = ? OR (path >= ? AND path < ?));"sv)),
         TRY(database->prepare_statement("SELECT contents, modified FROM Entries WHERE bucket = :bucket AND path = :path AND directory = 0;"sv)),
@@ -114,6 +114,9 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(void const* owner, Strin
     if (request.operation == Operation::OpenRoot)
         return Reply { path.is_empty() ? Status::Success : Status::InvalidName };
 
+    if ((request.operation == Operation::GetFile || request.operation == Operation::GetDirectory || request.operation == Operation::Remove) && !valid_name(request.name))
+        return Reply { Status::InvalidName };
+
     auto kind = TRY(entry_kind(bucket, path));
     if (!kind.has_value())
         return Reply { Status::NotFound };
@@ -144,18 +147,16 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(void const* owner, Strin
         return Reply { Status::NotFound };
 
     if (request.operation == Operation::List) {
+        auto cursor = TRY(String::formatted("{}/{}", path, request.name));
         Reply reply { Status::Success };
         TRY(m_database->try_execute_statement(m_statements.children, [&](auto statement) -> ErrorOr<void> {
             return reply.entries.try_append(Web::FileSystem::DirectoryEntry {
                 m_database->result_column<String>(statement, 0),
                 m_database->result_column<i64>(statement, 1) != 0,
             });
-        }, bucket, path));
+        }, bucket, path, cursor));
         return reply;
     }
-
-    if (!valid_name(request.name))
-        return Reply { Status::InvalidName };
 
     auto child_path = TRY(String::formatted("{}/{}", path, request.name));
     auto child_kind = TRY(entry_kind(bucket, child_path));
@@ -196,8 +197,8 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(void const* owner, Strin
 ErrorOr<Reply> OriginPrivateFileSystem::read_file(String const& bucket, String const& path)
 {
     return m_database->try_execute_bound_statement_one<Reply>(m_statements.read_file, [&](auto bind) -> ErrorOr<void> {
-        TRY(bind(":bucket"sv, bucket));
-        return bind(":path"sv, path);
+        TRY(bind("bucket"sv, bucket));
+        return bind("path"sv, path);
     }, [&](Database::ResultRow& row) -> ErrorOr<Reply> {
         return Reply { .status = Status::Success, .bytes = TRY(row.read_blob("contents"sv, max_file_size)), .last_modified = TRY(row.read_integer<i64>("modified"sv)) };
     });

@@ -11,13 +11,19 @@ use libjs_rust::api::{EmbedderClass, EmbedderValue, Gc, Object, PropertyKey, Rea
 
 use crate::bindings::conversions::{BufferSource, FromJs, ToJs, UsvString};
 use crate::bindings::cpp_cell::CppCell;
-use crate::bindings::interface::{Inherits, Ref, Wrappable, allocate, create_dictionary_object, set_dictionary_member, wrap};
-use crate::bindings::promise::{WebIdlPromise, create_rejected_promise_from_exception, create_resolved_promise, promise_from_abi};
+use crate::bindings::interface::{
+    Inherits, Ref, Wrappable, allocate, create_dictionary_object, set_dictionary_member, wrap,
+};
+use crate::bindings::promise::{
+    WebIdlPromise, create_rejected_promise_from_exception, create_resolved_promise, promise_from_abi,
+};
 use crate::bindings::{CallContext, Exception, MustNotThrow, WebIdlResult};
 use crate::file_api::blob::{AnyBlob, BlobPart};
 use crate::streams::algorithms::{AbortAlgorithm, CloseAlgorithm, SizeAlgorithm, StartAlgorithm, WriteAlgorithm};
 use crate::streams::writable_stream::{WritableStream, acquire_writable_stream_default_writer, create_writable_stream};
-use crate::streams::writable_stream_default_writer::{writable_stream_default_writer_release, writable_stream_default_writer_write};
+use crate::streams::writable_stream_default_writer::{
+    writable_stream_default_writer_release, writable_stream_default_writer_write,
+};
 
 unsafe extern "C" {
     fn web_file_system_writable_command(
@@ -79,7 +85,11 @@ impl WritableFile {
         // SAFETY: This cell is a live FileSystemOpenFile. The command borrows the bytes and returns a live promise.
         let promise = unsafe {
             promise_from_abi(web_file_system_writable_command(
-                self.file.as_ptr(), command as u8, offset, ak::Span::new(bytes), &mut success,
+                self.file.as_ptr(),
+                command as u8,
+                offset,
+                ak::Span::new(bytes),
+                &mut success,
             ))
         };
         (promise, success)
@@ -108,12 +118,18 @@ impl WritableFile {
             FileSystemWriteChunkType::USVString(string) => BlobPart::USVString(string),
             FileSystemWriteChunkType::WriteParams(params) => match params.r#type {
                 WriteCommandType::Seek => {
-                    let position = params.position.flatten().ok_or_else(|| Exception::type_error("Seek requires a position"))?;
+                    let position = params
+                        .position
+                        .flatten()
+                        .ok_or_else(|| Exception::type_error("Seek requires a position"))?;
                     self.cursor.set(position);
                     return Ok(create_resolved_promise(cx.vm(), cx.realm(), Value::UNDEFINED));
                 }
                 WriteCommandType::Truncate => {
-                    let size = params.size.flatten().ok_or_else(|| Exception::type_error("Truncate requires a size"))?;
+                    let size = params
+                        .size
+                        .flatten()
+                        .ok_or_else(|| Exception::type_error("Truncate requires a size"))?;
                     let (promise, success) = self.command(BrokerCommand::Resize, size, &[]);
                     if success {
                         self.cursor.set(self.cursor.get().min(size));
@@ -126,7 +142,10 @@ impl WritableFile {
                     if let Some(offset) = params.position.flatten() {
                         position = offset;
                     }
-                    params.data.flatten().ok_or_else(|| Exception::type_error("Write requires data"))?
+                    params
+                        .data
+                        .flatten()
+                        .ok_or_else(|| Exception::type_error("Write requires data"))?
                 }
             },
         };
@@ -194,7 +213,12 @@ impl FileSystemWritableFileStream {
                     set_dictionary_member(cx, object, &PropertyKey::from_utf8("size"), nullable_number(size))?;
                 }
                 if let Some(position) = params.position {
-                    set_dictionary_member(cx, object, &PropertyKey::from_utf8("position"), nullable_number(position))?;
+                    set_dictionary_member(
+                        cx,
+                        object,
+                        &PropertyKey::from_utf8("position"),
+                        nullable_number(position),
+                    )?;
                 }
                 if let Some(data) = params.data {
                     let data = match data {
@@ -214,14 +238,14 @@ impl FileSystemWritableFileStream {
     // https://fs.spec.whatwg.org/#dom-filesystemwritablefilestream-seek
     pub(crate) fn seek(&self, cx: &mut CallContext, position: u64) -> WebIdlResult<WebIdlPromise> {
         let command = command_object(cx, WriteCommandType::Seek)?;
-        set_dictionary_member(cx, command, &PropertyKey::from_utf8("position"), Value::from_f64(position as f64))?;
+        set_dictionary_member(cx, command, &PropertyKey::from_utf8("position"), offset_to_js(position))?;
         self.write_to_stream(cx, Value::from_object(command))
     }
 
     // https://fs.spec.whatwg.org/#dom-filesystemwritablefilestream-truncate
     pub(crate) fn truncate(&self, cx: &mut CallContext, size: u64) -> WebIdlResult<WebIdlPromise> {
         let command = command_object(cx, WriteCommandType::Truncate)?;
-        set_dictionary_member(cx, command, &PropertyKey::from_utf8("size"), Value::from_f64(size as f64))?;
+        set_dictionary_member(cx, command, &PropertyKey::from_utf8("size"), offset_to_js(size))?;
         self.write_to_stream(cx, Value::from_object(command))
     }
 
@@ -234,8 +258,13 @@ impl FileSystemWritableFileStream {
     }
 }
 
+fn offset_to_js(offset: u64) -> Value {
+    // Positions above this are beyond the file size limit. Keep them out of range even if a u64 rounds to 2^64.
+    Value::from_f64(offset.min(1 << 53) as f64)
+}
+
 fn nullable_number(value: Option<u64>) -> Value {
-    value.map_or(Value::NULL, |value| Value::from_f64(value as f64))
+    value.map_or(Value::NULL, offset_to_js)
 }
 
 fn blob_to_js(cx: &CallContext, blob: AnyBlob) -> Value {
@@ -256,7 +285,12 @@ fn command_object(cx: &CallContext, command: WriteCommandType) -> WebIdlResult<G
         WriteCommandType::Seek => "seek",
         WriteCommandType::Truncate => "truncate",
     };
-    set_dictionary_member(cx, object, &PropertyKey::from_utf8("type"), ak::Utf16String::from_utf8(name).to_js(cx)?)?;
+    set_dictionary_member(
+        cx,
+        object,
+        &PropertyKey::from_utf8("type"),
+        ak::Utf16String::from_utf8(name).to_js(cx)?,
+    )?;
     Ok(object)
 }
 
@@ -277,7 +311,10 @@ pub unsafe extern "C" fn web_rust_file_system_create_writable(
 
     // https://fs.spec.whatwg.org/#create-a-new-filesystemwritablefilestream
     // Set up the stream with write, close and abort algorithms and a high-water mark of one.
-    let file = WritableFile { file, cursor: Cell::new(0) };
+    let file = WritableFile {
+        file,
+        cursor: Cell::new(0),
+    };
     let file = WRITABLE_FILE_CLASS.allocate(vm, |_| file);
     let stream = create_writable_stream(
         &cx,
@@ -287,6 +324,7 @@ pub unsafe extern "C" fn web_rust_file_system_create_writable(
         AbortAlgorithm::FileSystem(file),
         1.0,
         SizeAlgorithm::ReturnsOne,
-    ).must();
+    )
+    .must();
     wrap(&cx, allocate(vm, |_| FileSystemWritableFileStream { stream })).as_ptr()
 }

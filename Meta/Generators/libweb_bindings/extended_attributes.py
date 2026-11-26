@@ -27,6 +27,13 @@ def wrap_with_extended_attribute_exposure_checks(
     {text}    }}
 """
 
+    elif extended_attributes.get("Exposed") == "DedicatedWorker":
+        includes.add("LibWeb/HTML/DedicatedWorkerGlobalScope.h")
+        text = text.replace("\n", "\n    ")
+        text = f"""    if (impl_from<HTML::DedicatedWorkerGlobalScope>(&realm.global_object())) {{
+    {text}    }}
+"""
+
     if "NavigatorCompatibilityMode" in extended_attributes:
         # Only the named engine has this member, so it exists only while the navigator claims to be that engine.
         includes.add("LibWeb/Loader/ResourceLoader.h")

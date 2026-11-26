@@ -9,6 +9,7 @@
 #include <LibWeb/FileSystem/FileSystemDirectoryHandle.h>
 #include <LibWeb/HTML/EventLoop/EventLoop.h>
 #include <LibWeb/HTML/Scripting/Environments.h>
+#include <LibWeb/HTML/Scripting/TemporaryExecutionContext.h>
 #include <LibWeb/HTML/Window.h>
 #include <LibWeb/HTML/WorkerGlobalScope.h>
 #include <LibWeb/Page/Page.h>
@@ -122,6 +123,7 @@ GC::Ref<WebIDL::Promise> FileSystemHandle::run_operation(Request command, GC::Re
     // The browser serializes requests on its storage queue. Complete the promise on the storage task source.
     HTML::queue_global_task(HTML::Task::Source::Storage, environment().global_object(),
         GC::create_function(heap(), GC::captures(*this, promise, move(command), convert), [](auto& self, auto& promise, auto& command, auto& convert) {
+            HTML::TemporaryExecutionContext context { self.realm(), HTML::TemporaryExecutionContext::CallbacksEnabled::Yes };
             auto reply = self.request(command);
             if (reply.status != Status::Success) {
                 reject(self.realm(), promise, reply.status);
@@ -143,6 +145,7 @@ GC::Ref<WebIDL::Promise> get_directory(HTML::EnvironmentSettingsObject& environm
     HTML::queue_global_task(HTML::Task::Source::Storage, environment.global_object(),
         GC::create_function(realm.heap(), GC::captures(environment, promise), [](auto& environment, auto& promise) {
             auto& realm = environment.realm();
+            HTML::TemporaryExecutionContext context { realm, HTML::TemporaryExecutionContext::CallbacksEnabled::Yes };
             auto key = StorageAPI::obtain_a_storage_key(environment);
             if (!key.has_value()) {
                 reject(realm, promise, Status::Unavailable);

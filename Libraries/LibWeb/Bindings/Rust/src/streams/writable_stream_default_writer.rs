@@ -18,8 +18,9 @@ use crate::bindings::promise::{
 };
 use crate::bindings::{CallContext, Exception, WebIdlResult};
 use crate::streams::writable_stream::{
-    AnyWritableStream, WritableStream, WritableStreamState, set_up_writable_stream_default_writer, writable_stream_abort,
-    writable_stream_add_write_request, writable_stream_close, writable_stream_close_queued_or_in_flight,
+    AnyWritableStream, WritableStream, WritableStreamState, set_up_writable_stream_default_writer,
+    writable_stream_abort, writable_stream_add_write_request, writable_stream_close,
+    writable_stream_close_queued_or_in_flight,
 };
 use crate::streams::writable_stream_default_controller::{
     writable_stream_default_controller_get_chunk_size, writable_stream_default_controller_get_desired_size,

@@ -15,9 +15,9 @@ use crate::bindings::conversions::to_unrestricted_double;
 use crate::bindings::interface::{Ref, wrap};
 use crate::bindings::promise::{WebIdlPromise, create_rejected_promise, create_resolved_promise};
 use crate::bindings::{CallContext, WebIdlResult};
-use crate::html::message_port::MessagePort;
 #[cfg(web_idl_bindings)]
 use crate::file_system::file_system_writable_file_stream::WritableFile;
+use crate::html::message_port::MessagePort;
 use crate::streams::cpp::{CppPromiseAlgorithm, CppPromiseAlgorithmWithArgument};
 use crate::streams::cross_realm_transform::{
     CrossRealmWritableState, cross_realm_transform_abort_algorithm, cross_realm_transform_cancel_algorithm,

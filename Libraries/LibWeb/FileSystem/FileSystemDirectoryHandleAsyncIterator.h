@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <AK/HashTable.h>
+#include <AK/String.h>
 #include <LibWeb/WebIDL/AsyncIterator.h>
 
 namespace Web::FileSystem {
@@ -26,7 +26,7 @@ private:
     virtual GC::Ref<WebIDL::Promise> next_iteration_result(JS::Realm&) override;
 
     GC::Ref<FileSystemDirectoryHandle> m_directory;
-    HashTable<String> m_past_results;
+    String m_last_name;
 };
 
 }
