@@ -8,6 +8,7 @@
 #include <LibWebView/BrowsingSession.h>
 #include <LibWebView/CookieJar.h>
 #include <LibWebView/HSTSStore.h>
+#include <LibWebView/OriginPrivateFileSystem.h>
 #include <LibWebView/PermissionManager.h>
 #include <LibWebView/StorageJar.h>
 
@@ -22,6 +23,17 @@ BrowsingSession::BrowsingSession(IsPrivate is_private)
 }
 
 BrowsingSession::~BrowsingSession() = default;
+
+OriginPrivateFileSystem* BrowsingSession::origin_private_file_system()
+{
+    if (!m_origin_private_file_system) {
+        auto store = OriginPrivateFileSystem::create(m_origin_private_file_system_directory);
+        if (store.is_error())
+            return nullptr;
+        m_origin_private_file_system = store.release_value();
+    }
+    return m_origin_private_file_system.ptr();
+}
 
 NonnullRefPtr<BrowsingSession> BrowsingSession::create(IsPrivate is_private)
 {

@@ -68,6 +68,7 @@ class CertificateUI;
 class SettingsUI;
 class SpellChecker;
 class Translator;
+class OriginPrivateFileSystem;
 class StorageJar;
 class TabDiscarder;
 class SystemProbeClient;

@@ -7,6 +7,7 @@
 #include <LibWebView/Application.h>
 #include <LibWebView/AudioServerControlClient.h>
 #include <LibWebView/BlobURLStore.h>
+#include <LibWebView/OriginPrivateFileSystem.h>
 #include <LibWebView/BrowsingSession.h>
 #include <LibWebView/CanonicalEnvironmentSettingsObject.h>
 #include <LibWebView/CookieJar.h>
@@ -154,6 +155,21 @@ Messages::WebWorkerClient::DidRequestCookieResponse WebWorkerClient::did_request
     if (auto session = m_session.strong_ref())
         cookie.cookie = session->cookie_jar->get_cookie(url, source, partition_context, HTTP::Cookie::non_http_same_site_context(partition_context));
     return cookie;
+}
+
+Messages::WebWorkerClient::RequestOriginPrivateFileSystemResponse WebWorkerClient::request_origin_private_file_system(Web::HTML::EnvironmentId environment_id, Web::FileSystem::Request request)
+{
+    auto session = m_session.strong_ref();
+    auto environment = hosted_environment(environment_id);
+    if (!session || !environment.has_value())
+        return Web::FileSystem::Reply {};
+    auto key = obtain_a_storage_key(*environment);
+    if (!key.has_value())
+        return Web::FileSystem::Reply {};
+    auto* store = session->origin_private_file_system();
+    if (!store)
+        return Web::FileSystem::Reply { Web::FileSystem::Status::IOError };
+    return store->request(key->to_string(), request);
 }
 
 Messages::WebWorkerClient::DidAddBlobUrlEntryResponse WebWorkerClient::did_add_blob_url_entry(Web::HTML::EnvironmentId environment_id, Utf16String url, Web::FileAPI::SerializedBlobURLEntry entry)

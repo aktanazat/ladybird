@@ -9,6 +9,7 @@
 #include <AK/ByteString.h>
 #include <AK/HashMap.h>
 #include <AK/NonnullOwnPtr.h>
+#include <AK/Optional.h>
 #include <AK/OwnPtr.h>
 #include <AK/RefCounted.h>
 #include <AK/Time.h>
@@ -46,6 +47,9 @@ public:
     OwnPtr<HSTSStore> hsts_store;
     OwnPtr<PermissionManager> permission_manager;
 
+    void set_origin_private_file_system_directory(ByteString directory) { m_origin_private_file_system_directory = move(directory); }
+    OriginPrivateFileSystem* origin_private_file_system();
+
     struct CertificateException {
         ByteString host;
         u16 port { 0 };
@@ -66,6 +70,9 @@ public:
 
 private:
     explicit BrowsingSession(IsPrivate);
+
+    Optional<ByteString> m_origin_private_file_system_directory;
+    OwnPtr<OriginPrivateFileSystem> m_origin_private_file_system;
 
     u64 m_id { 0 };
     IsPrivate m_is_private { IsPrivate::No };

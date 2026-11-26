@@ -148,6 +148,14 @@ void PageHost::request_file(Web::FileRequest request)
     m_client.request_file(move(request));
 }
 
+Web::FileSystem::Reply PageHost::request_origin_private_file_system(Web::HTML::EnvironmentId const& environment_id, Web::FileSystem::Request const& request)
+{
+    auto response = m_client.send_sync_but_allow_failure<Messages::WebWorkerClient::RequestOriginPrivateFileSystem>(environment_id, request);
+    if (!response)
+        return {};
+    return response->take_reply();
+}
+
 URL::BlobURLEntry::Token PageHost::page_did_add_blob_url_entry(Web::HTML::EnvironmentSettingsObject const& environment, Utf16String const& url, Web::FileAPI::SerializedBlobURLEntry const& entry)
 {
     auto response = m_client.send_sync_but_allow_failure<Messages::WebWorkerClient::DidAddBlobUrlEntry>(environment.id, url, entry);

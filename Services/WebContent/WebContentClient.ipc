@@ -22,6 +22,7 @@
 #include <LibWebCommon/ContentSecurityPolicy/Directives/NavigationType.h>
 #include <LibWebCommon/ContentSecurityPolicy/RemoteViolationDirective.h>
 #include <LibWebCommon/Fetch/Infrastructure/HTTP/RequestPriority.h>
+#include <LibWebCommon/StorageAPI/OriginPrivateFileSystem.h>
 #include <LibWebCommon/FileAPI/SerializedBlobURLEntry.h>
 #include <LibWebCommon/Fullscreen/FullscreenRequestType.h>
 #include <LibWebCommon/Gamepad/GamepadSnapshot.h>
@@ -210,6 +211,7 @@ endpoint WebContentClient routed by Web::PageId page_id
     request_video_presentation_channel() =|
 
     [NotRouted] did_request_storage_usage(Web::PageId page_id, Web::HTML::EnvironmentId environment_id) => (u64 usage)
+    [NotRouted] request_origin_private_file_system(Web::PageId page_id, Web::HTML::EnvironmentId environment_id, Web::FileSystem::Request request) => (Web::FileSystem::Reply reply)
     [NotRouted] connect_to_storage_area(Web::PageId page_id, Web::StorageAPI::StorageEndpointType storage_endpoint, Web::HTML::EnvironmentId environment_id) => (Optional<Web::StorageAPI::StorageAreaId> area_id, Vector<Utf16String> keys, Vector<Utf16String> values, u64 usage)
     disconnect_from_storage_area(Web::StorageAPI::StorageAreaId area_id) =|
     set_storage_item(Web::StorageAPI::StorageAreaId area_id, Utf16String key, Utf16String value, String url) =|

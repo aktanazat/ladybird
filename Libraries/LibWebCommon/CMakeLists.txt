@@ -67,6 +67,7 @@ set(SOURCES
     ReferrerPolicy/ReferrerPolicy.cpp
     SecureContexts/AbstractOperations.cpp
     StorageAPI/StorageEndpoint.cpp
+    StorageAPI/OriginPrivateFileSystem.cpp
     StorageAPI/StorageKey.cpp
     UpgradeInsecureRequests/InsecureRequestsPolicy.cpp
     WebDriver/BiDi.cpp

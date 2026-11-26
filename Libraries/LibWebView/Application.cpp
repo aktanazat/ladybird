@@ -1973,6 +1973,7 @@ ErrorOr<void> Application::launch_services()
 
     if (m_browser_options.disable_sql_database == DisableSQLDatabase::No) {
         auto database_path = profile().paths().data;
+        m_default_session->set_origin_private_file_system_directory(database_path);
         auto database = TRY(Database::Database::create(database_path, "Ladybird"sv));
 
         // The browsing database is shared by several stores, so the decision to fall back is

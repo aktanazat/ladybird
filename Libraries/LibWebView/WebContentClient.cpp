@@ -887,6 +887,13 @@ Messages::WebContentClient::DidRequestStorageUsageResponse WebContentClient::did
     return 0u;
 }
 
+Messages::WebContentClient::RequestOriginPrivateFileSystemResponse WebContentClient::request_origin_private_file_system(Web::PageId page_id, Web::HTML::EnvironmentId environment_id, Web::FileSystem::Request request)
+{
+    if (auto* page = this->page(page_id))
+        return page->request_origin_private_file_system(environment_id, request);
+    return Web::FileSystem::Reply {};
+}
+
 Messages::WebContentClient::ConnectToStorageAreaResponse WebContentClient::connect_to_storage_area(Web::PageId page_id, Web::StorageAPI::StorageEndpointType storage_endpoint, Web::HTML::EnvironmentId environment_id)
 {
     if (auto* page = this->page(page_id))

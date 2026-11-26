@@ -38,6 +38,7 @@
 #include <LibWebView/PlatformAuthenticator.h>
 #include <LibWebView/RecordingNotificationBackend.h>
 #include <LibWebView/RequestServerManager.h>
+#include <LibWebView/OriginPrivateFileSystem.h>
 #include <LibWebView/StorageAreaRegistry.h>
 #include <LibWebView/StorageJar.h>
 #include <LibWebView/URL.h>
@@ -1424,6 +1425,17 @@ void WebContentPage::clear_storage_for_testing(Web::StorageAPI::StorageEndpointT
     auto* storage_jar = this->storage_jar(storage_endpoint);
     if (canonical_key.has_value() && storage_jar)
         storage_jar->clear_storage_key(storage_endpoint, *canonical_key);
+}
+
+Web::FileSystem::Reply WebContentPage::request_origin_private_file_system(Web::HTML::EnvironmentId const& environment_id, Web::FileSystem::Request const& request)
+{
+    auto key = canonical_storage_key(environment_id);
+    if (!key.has_value())
+        return {};
+    auto* store = client().session().origin_private_file_system();
+    if (!store)
+        return { Web::FileSystem::Status::IOError };
+    return store->request(*key, request);
 }
 
 Messages::WebContentClient::ConnectToStorageAreaResponse WebContentPage::connect_to_storage_area(Web::StorageAPI::StorageEndpointType storage_endpoint, Web::HTML::EnvironmentId environment_id)
