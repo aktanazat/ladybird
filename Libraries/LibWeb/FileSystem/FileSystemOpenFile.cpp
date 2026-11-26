@@ -36,14 +36,14 @@ void FileSystemOpenFile::finalize()
         m_abandon(m_token);
 }
 
-Reply FileSystemOpenFile::request(Operation operation, u64 offset, ReadonlyBytes chunk)
+Reply FileSystemOpenFile::request(Operation operation, u64 offset, ReadonlyBytes chunk, u64 length)
 {
     if (m_token == 0)
         return { Status::Closed };
     auto bytes = ByteBuffer::copy(chunk);
     if (bytes.is_error())
         return { Status::QuotaExceeded };
-    auto reply = m_handle->request({ .operation = operation, .token = m_token, .offset = offset, .bytes = bytes.release_value() });
+    auto reply = m_handle->request({ .operation = operation, .token = m_token, .offset = offset, .bytes = bytes.release_value(), .length = length });
     if (operation == Operation::Commit || operation == Operation::Close) {
         if (reply.status != Status::Success && m_abandon)
             m_abandon(m_token);

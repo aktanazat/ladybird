@@ -21,14 +21,15 @@ ErrorOr<void> encode(Encoder& encoder, Request const& request)
     TRY(encoder.encode(request.option));
     TRY(encoder.encode(request.token));
     TRY(encoder.encode(request.offset));
-    return encoder.encode(request.bytes);
+    TRY(encoder.encode(request.bytes));
+    return encoder.encode(request.length);
 }
 
 template<>
 ErrorOr<Request> decode(Decoder& decoder)
 {
     auto operation = TRY(decoder.decode<u8>());
-    if (operation > to_underlying(Operation::Close))
+    if (operation > to_underlying(Operation::Flush))
         return Error::from_string_literal("Invalid file system operation");
     return Request {
         static_cast<Operation>(operation),
@@ -38,6 +39,7 @@ ErrorOr<Request> decode(Decoder& decoder)
         TRY(decoder.decode<u64>()),
         TRY(decoder.decode<u64>()),
         TRY(decoder.decode<ByteBuffer>()),
+        TRY(decoder.decode<u64>()),
     };
 }
 

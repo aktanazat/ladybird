@@ -324,6 +324,7 @@ set(SOURCES
     FileSystem/FileSystemFileHandle.cpp
     FileSystem/FileSystemHandle.cpp
     FileSystem/FileSystemOpenFile.cpp
+    FileSystem/FileSystemSyncAccessHandle.cpp
     FileAPI/BlobURLStore.cpp
     FileAPI/File.cpp
     FileAPI/FileList.cpp

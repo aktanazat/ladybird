@@ -1,0 +1,14 @@
+// https://fs.spec.whatwg.org/#api-filesystemsyncaccesshandle
+dictionary FileSystemReadWriteOptions {
+    [EnforceRange] unsigned long long at;
+};
+
+[Exposed=DedicatedWorker, SecureContext, ImplementedIn=Rust]
+interface FileSystemSyncAccessHandle {
+    unsigned long long read(AllowSharedBufferSource buffer, optional FileSystemReadWriteOptions options = {});
+    unsigned long long write(AllowSharedBufferSource buffer, optional FileSystemReadWriteOptions options = {});
+    undefined truncate([EnforceRange] unsigned long long newSize);
+    unsigned long long getSize();
+    undefined flush();
+    undefined close();
+};

@@ -1439,6 +1439,8 @@ void WebContentPage::clear_storage_for_testing(Web::StorageAPI::StorageEndpointT
 
 Web::FileSystem::Reply WebContentPage::request_origin_private_file_system(Web::HTML::EnvironmentId const& environment_id, Web::FileSystem::Request const& request)
 {
+    if (request.operation == Web::FileSystem::Operation::OpenSync)
+        return {};
     auto key = canonical_storage_key(environment_id);
     if (!key.has_value())
         return {};

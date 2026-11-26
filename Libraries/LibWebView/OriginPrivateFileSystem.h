@@ -15,6 +15,8 @@ namespace WebView {
 
 // One store per browsing session. All access is serialized by the browser's event loop.
 class OriginPrivateFileSystem {
+    AK_ALLOC_WITH_KMALLOC;
+
 public:
     static ErrorOr<NonnullOwnPtr<OriginPrivateFileSystem>> create(Optional<ByteString> const& directory);
     Web::FileSystem::Reply request(void const* owner, String const& bucket, Web::FileSystem::Request const&);
@@ -37,7 +39,7 @@ private:
         void const* owner;
         String bucket;
         String path;
-        ByteBuffer staged_bytes;
+        Optional<ByteBuffer> staged_bytes;
     };
 
     ErrorOr<Web::FileSystem::Reply> perform_request(void const* owner, String const& bucket, Web::FileSystem::Request const&);

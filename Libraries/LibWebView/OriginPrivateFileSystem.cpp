@@ -118,16 +118,23 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(void const* owner, Strin
     if (!kind.has_value())
         return Reply { Status::NotFound };
 
-    if (request.operation == Operation::ReadFile || request.operation == Operation::OpenWritable) {
+    if (request.operation == Operation::ReadFile || request.operation == Operation::OpenWritable || request.operation == Operation::OpenSync) {
         if (*kind)
             return Reply { Status::NotFound };
         if (request.operation == Operation::ReadFile)
             return read_file(bucket, path);
 
-        // Writable streams each take a shared lock and get an independent staging buffer.
-        ByteBuffer bytes;
-        if (request.option)
-            bytes = TRY(read_file(bucket, path)).bytes;
+        // Writable streams take shared locks. Sync handles take an exclusive lock.
+        bool exclusive = request.operation == Operation::OpenSync;
+        for (auto const& entry : m_open_files) {
+            auto const& open = entry.value;
+            if (open.bucket == bucket && open.path == path && (exclusive || !open.staged_bytes.has_value()))
+                return Reply { Status::Locked };
+        }
+
+        Optional<ByteBuffer> bytes;
+        if (!exclusive)
+            bytes = request.option ? TRY(read_file(bucket, path)).bytes : ByteBuffer {};
         auto token = m_next_token++;
         TRY(m_open_files.try_set(token, OpenFile { owner, bucket, path, move(bytes) }));
         return Reply { .status = Status::Success, .value = token };
@@ -154,7 +161,7 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(void const* owner, Strin
     auto child_kind = TRY(entry_kind(bucket, child_path));
     if (request.operation == Operation::Remove) {
         if (!child_kind.has_value())
-            return Reply { Status::Success };
+            return Reply { Status::NotFound };
         if (*child_kind && !request.option) {
             bool has_children = false;
             TRY(m_database->try_execute_statement(m_statements.has_children, [&](auto) -> ErrorOr<void> {
@@ -170,7 +177,7 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(void const* owner, Strin
         auto after_descendants = TRY(String::formatted("{}0", child_path));
         for (auto const& entry : m_open_files) {
             auto const& open = entry.value;
-            if (open.bucket == bucket && (open.path == child_path || open.path.starts_with(first_descendant)))
+            if (open.bucket == bucket && (open.path == child_path || open.path.bytes_as_string_view().starts_with(first_descendant.bytes_as_string_view())))
                 return Reply { Status::Locked };
         }
         TRY(m_database->try_execute_statement(m_statements.delete_entry, {}, bucket, child_path, first_descendant, after_descendants));
@@ -215,21 +222,45 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_open_file_request(void const* ow
     }
 
     if (request.operation == Operation::Commit) {
+        if (!file.staged_bytes.has_value())
+            return Reply { Status::Closed };
         ScopeGuard release_lock = [&] { m_open_files.remove(it); };
-        TRY(write_file(bucket, file.path, file.staged_bytes.bytes()));
+        TRY(write_file(bucket, file.path, file.staged_bytes->bytes()));
         return Reply { Status::Success };
+    }
+
+    bool sync = !file.staged_bytes.has_value();
+    if (request.operation == Operation::Flush) {
+        // Each sync write commits with SQLite synchronous=FULL.
+        return Reply { sync ? Status::Success : Status::Closed };
+    }
+
+    if (request.operation == Operation::Read || request.operation == Operation::Size) {
+        if (!sync)
+            return Reply { Status::Closed };
+        auto contents = TRY(read_file(bucket, file.path)).bytes;
+        if (request.operation == Operation::Size)
+            return Reply { .status = Status::Success, .value = contents.size() };
+        auto start = min<u64>(request.offset, contents.size());
+        auto count = min<u64>(request.length, contents.size() - start);
+        return Reply { .status = Status::Success, .bytes = TRY(ByteBuffer::copy(contents.bytes().slice(start, count))), .value = start + count };
     }
 
     auto offset = request.offset;
     if (offset > max_file_size || request.bytes.size() > max_file_size - offset)
         return Reply { Status::QuotaExceeded };
 
-    auto& bytes = file.staged_bytes;
+    ByteBuffer contents;
+    if (sync)
+        contents = TRY(read_file(bucket, file.path)).bytes;
+    auto& bytes = sync ? contents : *file.staged_bytes;
     auto size = request.operation == Operation::Resize ? offset : max<u64>(bytes.size(), offset + request.bytes.size());
     TRY(bytes.try_resize(size, ByteBuffer::ZeroFillNewElements::Yes));
     if (request.operation == Operation::Write && !request.bytes.is_empty())
         memcpy(bytes.data() + offset, request.bytes.data(), request.bytes.size());
-    return Reply { Status::Success };
+    if (sync)
+        TRY(write_file(bucket, file.path, bytes.bytes()));
+    return Reply { .status = Status::Success, .value = request.bytes.size() };
 }
 
 void OriginPrivateFileSystem::release(void const* owner, u64 token)

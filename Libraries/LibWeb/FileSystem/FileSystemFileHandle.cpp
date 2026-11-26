@@ -16,6 +16,9 @@ GC_DEFINE_ALLOCATOR(FileSystemFileHandle);
 
 extern "C" JS::Object* web_rust_file_system_create_writable(JSVM*, JS::Realm*, FileSystemOpenFile*);
 
+extern "C" WebIDL::Promise* web_file_system_writable_command(FileSystemOpenFile* file, u8 command, u64 offset, ReadonlyBytes bytes, bool* success);
+extern "C" void web_file_system_abandon_writable(FileSystemOpenFile* file);
+
 extern "C" WebIDL::Promise* web_file_system_writable_command(FileSystemOpenFile* file, u8 command, u64 offset, ReadonlyBytes bytes, bool* success)
 {
     static constexpr Operation operations[] = { Operation::Write, Operation::Resize, Operation::Commit, Operation::Close };

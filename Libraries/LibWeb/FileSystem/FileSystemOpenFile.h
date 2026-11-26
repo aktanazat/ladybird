@@ -17,7 +17,7 @@ class FileSystemOpenFile final : public GC::Cell {
 
 public:
     static GC::Ref<FileSystemOpenFile> create(FileSystemFileHandle&, u64 token);
-    Reply request(Operation, u64 offset = 0, ReadonlyBytes = {});
+    Reply request(Operation, u64 offset = 0, ReadonlyBytes = {}, u64 length = 0);
     JS::Realm& realm() const { return m_handle->realm(); }
 
 private:

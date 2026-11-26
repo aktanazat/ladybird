@@ -23,10 +23,14 @@ enum class Operation : u8 {
     List,
     ReadFile,
     OpenWritable,
+    OpenSync,
     Write,
     Resize,
     Commit,
     Close,
+    Read,
+    Size,
+    Flush,
 };
 
 enum class Status : u8 {
@@ -50,6 +54,7 @@ struct Request {
     u64 token { 0 };
     u64 offset { 0 };
     ByteBuffer bytes {};
+    u64 length { 0 };
 };
 
 struct DirectoryEntry {
