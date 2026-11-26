@@ -18,20 +18,26 @@ ErrorOr<void> encode(Encoder& encoder, Request const& request)
     TRY(encoder.encode(to_underlying(request.operation)));
     TRY(encoder.encode(request.path));
     TRY(encoder.encode(request.name));
-    return encoder.encode(request.option);
+    TRY(encoder.encode(request.option));
+    TRY(encoder.encode(request.token));
+    TRY(encoder.encode(request.offset));
+    return encoder.encode(request.bytes);
 }
 
 template<>
 ErrorOr<Request> decode(Decoder& decoder)
 {
     auto operation = TRY(decoder.decode<u8>());
-    if (operation > to_underlying(Operation::ReadFile))
+    if (operation > to_underlying(Operation::Close))
         return Error::from_string_literal("Invalid file system operation");
     return Request {
         static_cast<Operation>(operation),
         TRY(decoder.decode<Vector<String>>()),
         TRY(decoder.decode<String>()),
         TRY(decoder.decode<bool>()),
+        TRY(decoder.decode<u64>()),
+        TRY(decoder.decode<u64>()),
+        TRY(decoder.decode<ByteBuffer>()),
     };
 }
 
@@ -54,20 +60,22 @@ ErrorOr<void> encode(Encoder& encoder, Reply const& reply)
     TRY(encoder.encode(to_underlying(reply.status)));
     TRY(encoder.encode(reply.entries));
     TRY(encoder.encode(reply.bytes));
-    return encoder.encode(reply.last_modified);
+    TRY(encoder.encode(reply.last_modified));
+    return encoder.encode(reply.value);
 }
 
 template<>
 ErrorOr<Reply> decode(Decoder& decoder)
 {
     auto status = TRY(decoder.decode<u8>());
-    if (status > to_underlying(Status::IOError))
+    if (status > to_underlying(Status::Closed))
         return Error::from_string_literal("Invalid file system status");
     return Reply {
         static_cast<Status>(status),
         TRY(decoder.decode<Vector<DirectoryEntry>>()),
         TRY(decoder.decode<ByteBuffer>()),
         TRY(decoder.decode<i64>()),
+        TRY(decoder.decode<u64>()),
     };
 }
 

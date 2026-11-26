@@ -16,6 +16,8 @@ use crate::bindings::interface::{Ref, wrap};
 use crate::bindings::promise::{WebIdlPromise, create_rejected_promise, create_resolved_promise};
 use crate::bindings::{CallContext, WebIdlResult};
 use crate::html::message_port::MessagePort;
+#[cfg(web_idl_bindings)]
+use crate::file_system::file_system_writable_file_stream::WritableFile;
 use crate::streams::cpp::{CppPromiseAlgorithm, CppPromiseAlgorithmWithArgument};
 use crate::streams::cross_realm_transform::{
     CrossRealmWritableState, cross_realm_transform_abort_algorithm, cross_realm_transform_cancel_algorithm,
@@ -259,12 +261,16 @@ pub(crate) enum WriteAlgorithm {
     CrossRealm(Gc<EmbedderCell<CrossRealmWritableState>>),
     /// The writeAlgorithm of setting up a WritableStream, given by C++.
     CppWrapper(CppPromiseAlgorithmWithArgument),
+    #[cfg(web_idl_bindings)]
+    FileSystem(Gc<EmbedderCell<WritableFile>>),
 }
 
 impl WriteAlgorithm {
     /// Performs the algorithm given the chunk, with the context of the realm of the stream.
     pub(crate) fn run(&self, cx: &CallContext, chunk: Value) -> WebIdlPromise {
         match self {
+            #[cfg(web_idl_bindings)]
+            Self::FileSystem(file) => file.write(cx, chunk),
             Self::ReturnsResolvedUndefined => resolved_with_undefined(cx),
             Self::Callback {
                 write,
@@ -297,12 +303,16 @@ pub(crate) enum CloseAlgorithm {
     TransformStream(Ref<TransformStream>),
     /// The closeAlgorithm of SetUpCrossRealmTransformWritable.
     CrossRealm(Ref<MessagePort>),
+    #[cfg(web_idl_bindings)]
+    FileSystem(Gc<EmbedderCell<WritableFile>>),
 }
 
 impl CloseAlgorithm {
     /// Performs the algorithm, with the context of the realm of the stream.
     pub(crate) fn run(&self, cx: &CallContext) -> WebIdlPromise {
         match self {
+            #[cfg(web_idl_bindings)]
+            Self::FileSystem(file) => file.close(),
             Self::ReturnsResolvedUndefined => resolved_with_undefined(cx),
             Self::Callback { close, underlying_sink } => close.invoke(Some(*underlying_sink), &[]),
             Self::TransformStream(stream) => transform_stream_default_sink_close_algorithm(cx, *stream),
@@ -327,12 +337,16 @@ pub(crate) enum AbortAlgorithm {
     TransformStream(Ref<TransformStream>),
     /// The abortAlgorithm of SetUpCrossRealmTransformWritable.
     CrossRealm(Ref<MessagePort>),
+    #[cfg(web_idl_bindings)]
+    FileSystem(Gc<EmbedderCell<WritableFile>>),
 }
 
 impl AbortAlgorithm {
     /// Performs the algorithm given the reason, with the context of the realm of the stream.
     pub(crate) fn run(&self, cx: &CallContext, reason: Value) -> WebIdlPromise {
         match self {
+            #[cfg(web_idl_bindings)]
+            Self::FileSystem(file) => file.abort(),
             Self::ReturnsResolvedUndefined => resolved_with_undefined(cx),
             Self::Callback { abort, underlying_sink } => abort.invoke(Some(*underlying_sink), &[reason]),
             Self::TransformStream(stream) => transform_stream_default_sink_abort_algorithm(cx, *stream, reason),

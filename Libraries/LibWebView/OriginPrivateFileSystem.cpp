@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include <AK/ScopeGuard.h>
 #include <AK/StringBuilder.h>
 #include <AK/Time.h>
 #include <LibDatabase/ResultRow.h>
@@ -69,6 +70,7 @@ ErrorOr<NonnullOwnPtr<OriginPrivateFileSystem>> OriginPrivateFileSystem::create(
         TRY(database->prepare_statement("SELECT 1 FROM Entries WHERE bucket = ? AND parent = ? LIMIT 1;"sv)),
         TRY(database->prepare_statement("DELETE FROM Entries WHERE bucket = ? AND (path = ? OR (path >= ? AND path < ?));"sv)),
         TRY(database->prepare_statement("SELECT contents, modified FROM Entries WHERE bucket = :bucket AND path = :path AND directory = 0;"sv)),
+        TRY(database->prepare_statement("UPDATE Entries SET contents = ?, modified = ? WHERE bucket = ? AND path = ? AND directory = 0;"sv)),
     };
     return adopt_own(*new OriginPrivateFileSystem(move(database), statements));
 }
@@ -86,16 +88,19 @@ ErrorOr<Optional<bool>> OriginPrivateFileSystem::entry_kind(String const& bucket
     return is_directory;
 }
 
-Reply OriginPrivateFileSystem::request(String const& bucket, Request const& request)
+Reply OriginPrivateFileSystem::request(void const* owner, String const& bucket, Request const& request)
 {
-    auto result = perform_request(bucket, request);
+    auto result = perform_request(owner, bucket, request);
     if (result.is_error())
         return { Status::IOError };
     return result.release_value();
 }
 
-ErrorOr<Reply> OriginPrivateFileSystem::perform_request(String const& bucket, Request const& request)
+ErrorOr<Reply> OriginPrivateFileSystem::perform_request(void const* owner, String const& bucket, Request const& request)
 {
+    if (request.operation >= Operation::Write)
+        return perform_open_file_request(owner, bucket, request);
+
     // Entry names are database values. They never form part of a host file system path.
     StringBuilder builder;
     for (auto const& component : request.path) {
@@ -113,15 +118,19 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(String const& bucket, Re
     if (!kind.has_value())
         return Reply { Status::NotFound };
 
-    if (request.operation == Operation::ReadFile) {
+    if (request.operation == Operation::ReadFile || request.operation == Operation::OpenWritable) {
         if (*kind)
             return Reply { Status::NotFound };
-        return m_database->try_execute_bound_statement_one<Reply>(m_statements.read_file, [&](auto bind) -> ErrorOr<void> {
-            TRY(bind(":bucket"sv, bucket));
-            return bind(":path"sv, path);
-        }, [&](Database::ResultRow& row) -> ErrorOr<Reply> {
-            return Reply { .status = Status::Success, .bytes = TRY(row.read_blob("contents"sv, max_file_size)), .last_modified = TRY(row.read_integer<i64>("modified"sv)) };
-        });
+        if (request.operation == Operation::ReadFile)
+            return read_file(bucket, path);
+
+        // Writable streams each take a shared lock and get an independent staging buffer.
+        ByteBuffer bytes;
+        if (request.option)
+            bytes = TRY(read_file(bucket, path)).bytes;
+        auto token = m_next_token++;
+        TRY(m_open_files.try_set(token, OpenFile { owner, bucket, path, move(bytes) }));
+        return Reply { .status = Status::Success, .value = token };
     }
 
     if (!*kind)
@@ -159,6 +168,11 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(String const& bucket, Re
         // With BINARY collation, all descendants are between the '/' suffix and the next character, '0'.
         auto first_descendant = TRY(String::formatted("{}/", child_path));
         auto after_descendants = TRY(String::formatted("{}0", child_path));
+        for (auto const& entry : m_open_files) {
+            auto const& open = entry.value;
+            if (open.bucket == bucket && (open.path == child_path || open.path.starts_with(first_descendant)))
+                return Reply { Status::Locked };
+        }
         TRY(m_database->try_execute_statement(m_statements.delete_entry, {}, bucket, child_path, first_descendant, after_descendants));
         return Reply { Status::Success };
     }
@@ -170,6 +184,64 @@ ErrorOr<Reply> OriginPrivateFileSystem::perform_request(String const& bucket, Re
         return Reply { Status::NotFound };
     TRY(m_database->try_execute_statement(m_statements.insert_entry, {}, bucket, child_path, path, request.name, wants_directory, UnixDateTime::now().milliseconds_since_epoch()));
     return Reply { Status::Success };
+}
+
+ErrorOr<Reply> OriginPrivateFileSystem::read_file(String const& bucket, String const& path)
+{
+    return m_database->try_execute_bound_statement_one<Reply>(m_statements.read_file, [&](auto bind) -> ErrorOr<void> {
+        TRY(bind(":bucket"sv, bucket));
+        return bind(":path"sv, path);
+    }, [&](Database::ResultRow& row) -> ErrorOr<Reply> {
+        return Reply { .status = Status::Success, .bytes = TRY(row.read_blob("contents"sv, max_file_size)), .last_modified = TRY(row.read_integer<i64>("modified"sv)) };
+    });
+}
+
+ErrorOr<void> OriginPrivateFileSystem::write_file(String const& bucket, String const& path, ReadonlyBytes bytes)
+{
+    // SQLite atomically publishes the new contents and timestamp in one update.
+    return m_database->try_execute_statement(m_statements.write_file, {}, bytes, UnixDateTime::now().milliseconds_since_epoch(), bucket, path);
+}
+
+ErrorOr<Reply> OriginPrivateFileSystem::perform_open_file_request(void const* owner, String const& bucket, Request const& request)
+{
+    auto it = m_open_files.find(request.token);
+    if (it == m_open_files.end() || it->value.owner != owner || it->value.bucket != bucket)
+        return Reply { Status::Closed };
+    auto& file = it->value;
+
+    if (request.operation == Operation::Close) {
+        m_open_files.remove(it);
+        return Reply { Status::Success };
+    }
+
+    if (request.operation == Operation::Commit) {
+        ScopeGuard release_lock = [&] { m_open_files.remove(it); };
+        TRY(write_file(bucket, file.path, file.staged_bytes.bytes()));
+        return Reply { Status::Success };
+    }
+
+    auto offset = request.offset;
+    if (offset > max_file_size || request.bytes.size() > max_file_size - offset)
+        return Reply { Status::QuotaExceeded };
+
+    auto& bytes = file.staged_bytes;
+    auto size = request.operation == Operation::Resize ? offset : max<u64>(bytes.size(), offset + request.bytes.size());
+    TRY(bytes.try_resize(size, ByteBuffer::ZeroFillNewElements::Yes));
+    if (request.operation == Operation::Write && !request.bytes.is_empty())
+        memcpy(bytes.data() + offset, request.bytes.data(), request.bytes.size());
+    return Reply { Status::Success };
+}
+
+void OriginPrivateFileSystem::release(void const* owner, u64 token)
+{
+    auto it = m_open_files.find(token);
+    if (it != m_open_files.end() && it->value.owner == owner)
+        m_open_files.remove(it);
+}
+
+void OriginPrivateFileSystem::release_all(void const* owner)
+{
+    m_open_files.remove_all_matching([&](auto, auto const& file) { return file.owner == owner; });
 }
 
 }

@@ -12,6 +12,7 @@
 
 endpoint WebWorkerClient {
     request_origin_private_file_system(Web::HTML::EnvironmentId environment_id, Web::FileSystem::Request request) => (Web::FileSystem::Reply reply)
+    release_origin_private_file_system(u64 token) =|
     did_add_blob_url_entry(Web::HTML::EnvironmentId environment_id, Utf16String url, Web::FileAPI::SerializedBlobURLEntry entry) => (URL::BlobURLEntry::Token token)
     did_remove_blob_url_entries(Web::HTML::EnvironmentId environment_id, Vector<Utf16String> urls) => ()
     did_request_blob_url_entry(Utf16String url, Optional<URL::BlobURLEntry::Token> token) => (Optional<Web::FileAPI::SerializedBlobURLEntry> entry)

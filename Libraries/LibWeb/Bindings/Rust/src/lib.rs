@@ -177,6 +177,9 @@ pub(crate) mod fetch;
 )]
 pub(crate) mod file_api;
 #[cfg(not(test))]
+#[cfg(web_idl_bindings)]
+pub(crate) mod file_system;
+#[cfg(not(test))]
 #[cfg_attr(
     not(web_idl_bindings),
     allow(dead_code, reason = "only the generated bindings use the interfaces")

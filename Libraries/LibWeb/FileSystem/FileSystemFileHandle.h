@@ -18,6 +18,7 @@ class FileSystemFileHandle final : public FileSystemHandle {
 public:
     static GC::Ref<FileSystemFileHandle> create(HTML::EnvironmentSettingsObject&, StorageAPI::StorageKey, Vector<String>);
     GC::Ref<WebIDL::Promise> get_file();
+    GC::Ref<WebIDL::Promise> create_writable(Bindings::FileSystemCreateWritableOptions const&);
 
 private:
     FileSystemFileHandle(HTML::EnvironmentSettingsObject&, StorageAPI::StorageKey, Vector<String>);

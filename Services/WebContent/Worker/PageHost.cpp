@@ -148,6 +148,14 @@ void PageHost::request_file(Web::FileRequest request)
     m_client.request_file(move(request));
 }
 
+Function<void(u64)> PageHost::origin_private_file_system_release_callback()
+{
+    return [connection = m_client.make_weak_ptr<ConnectionFromClient>()](u64 token) {
+        if (auto client = connection.strong_ref(); client && client->is_open())
+            client->async_release_origin_private_file_system(token);
+    };
+}
+
 Web::FileSystem::Reply PageHost::request_origin_private_file_system(Web::HTML::EnvironmentId const& environment_id, Web::FileSystem::Request const& request)
 {
     auto response = m_client.send_sync_but_allow_failure<Messages::WebWorkerClient::RequestOriginPrivateFileSystem>(environment_id, request);

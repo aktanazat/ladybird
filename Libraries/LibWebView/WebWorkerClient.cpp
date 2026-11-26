@@ -36,6 +36,7 @@ WebWorkerClient::WebWorkerClient(NonnullOwnPtr<IPC::Transport> transport, Browsi
 
 WebWorkerClient::~WebWorkerClient()
 {
+    forget_inside_settings_of_closing_worker();
     remove_blob_url_entries();
 }
 
@@ -58,6 +59,7 @@ void WebWorkerClient::did_misbehave(StringView message_name, StringView reason)
 
 void WebWorkerClient::die()
 {
+    forget_inside_settings_of_closing_worker();
     remove_blob_url_entries();
     WorkerAgentManager::the().worker_did_die(m_agent_id);
 
@@ -110,6 +112,10 @@ void WebWorkerClient::set_inside_settings(NonnullOwnPtr<CanonicalWorkerEnvironme
 
 void WebWorkerClient::forget_inside_settings_of_closing_worker()
 {
+    if (auto session = m_session.strong_ref()) {
+        if (auto* store = session->existing_origin_private_file_system())
+            store->release_all(this);
+    }
     m_inside_settings = nullptr;
     m_script_blob_url = {};
 }
@@ -169,7 +175,15 @@ Messages::WebWorkerClient::RequestOriginPrivateFileSystemResponse WebWorkerClien
     auto* store = session->origin_private_file_system();
     if (!store)
         return Web::FileSystem::Reply { Web::FileSystem::Status::IOError };
-    return store->request(key->to_string(), request);
+    return store->request(this, key->to_string(), request);
+}
+
+void WebWorkerClient::release_origin_private_file_system(u64 token)
+{
+    if (auto session = m_session.strong_ref()) {
+        if (auto* store = session->existing_origin_private_file_system())
+            store->release(this, token);
+    }
 }
 
 Messages::WebWorkerClient::DidAddBlobUrlEntryResponse WebWorkerClient::did_add_blob_url_entry(Web::HTML::EnvironmentId environment_id, Utf16String url, Web::FileAPI::SerializedBlobURLEntry entry)

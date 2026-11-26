@@ -1,0 +1,18 @@
+// https://fs.spec.whatwg.org/#api-filesystemwritablefilestream
+enum WriteCommandType { "write", "seek", "truncate" };
+
+dictionary WriteParams {
+    required WriteCommandType type;
+    unsigned long long? size;
+    unsigned long long? position;
+    BlobPart? data;
+};
+
+typedef (BufferSource or Blob or USVString or WriteParams) FileSystemWriteChunkType;
+
+[Exposed=(Window,Worker), SecureContext, ImplementedIn=Rust]
+interface FileSystemWritableFileStream : WritableStream {
+    Promise<undefined> write(FileSystemWriteChunkType data);
+    Promise<undefined> seek(unsigned long long position);
+    Promise<undefined> truncate(unsigned long long size);
+};

@@ -323,6 +323,7 @@ set(SOURCES
     FileSystem/FileSystemDirectoryHandleAsyncIterator.cpp
     FileSystem/FileSystemFileHandle.cpp
     FileSystem/FileSystemHandle.cpp
+    FileSystem/FileSystemOpenFile.cpp
     FileAPI/BlobURLStore.cpp
     FileAPI/File.cpp
     FileAPI/FileList.cpp

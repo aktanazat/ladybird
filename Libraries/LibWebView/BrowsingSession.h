@@ -49,6 +49,7 @@ public:
 
     void set_origin_private_file_system_directory(ByteString directory) { m_origin_private_file_system_directory = move(directory); }
     OriginPrivateFileSystem* origin_private_file_system();
+    OriginPrivateFileSystem* existing_origin_private_file_system() const { return m_origin_private_file_system.ptr(); }
 
     struct CertificateException {
         ByteString host;

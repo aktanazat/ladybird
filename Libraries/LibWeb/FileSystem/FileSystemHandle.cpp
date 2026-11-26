@@ -57,15 +57,19 @@ GC::Ref<WebIDL::Promise> FileSystemHandle::is_same_entry(FileSystemHandle const&
     return promise;
 }
 
-Reply request(HTML::EnvironmentSettingsObject& environment, Request const& request)
+Page* page_for(HTML::EnvironmentSettingsObject& environment)
 {
     auto& global = environment.global_object();
-    Page* page = nullptr;
     if (auto* window = Bindings::impl_from<HTML::Window>(&global))
-        page = &window->page();
-    else if (auto* worker = Bindings::impl_from<HTML::WorkerGlobalScope>(&global))
-        page = worker->page();
+        return &window->page();
+    if (auto* worker = Bindings::impl_from<HTML::WorkerGlobalScope>(&global))
+        return worker->page();
+    return nullptr;
+}
 
+Reply request(HTML::EnvironmentSettingsObject& environment, Request const& request)
+{
+    auto* page = page_for(environment);
     if (!page)
         return {};
     return page->client().request_origin_private_file_system(environment.id, request);
@@ -102,6 +106,9 @@ void reject(JS::Realm& realm, WebIDL::Promise const& promise, Status status)
         return;
     case Status::IOError:
         WebIDL::reject_promise(realm, promise, WebIDL::UnknownError::create("The file system operation failed"_utf16));
+        return;
+    case Status::Closed:
+        WebIDL::reject_promise(realm, promise, WebIDL::InvalidStateError::create("The file is closed"_utf16));
         return;
     case Status::Success:
         VERIFY_NOT_REACHED();

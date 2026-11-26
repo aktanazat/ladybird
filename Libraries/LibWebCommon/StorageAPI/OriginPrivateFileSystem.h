@@ -22,6 +22,11 @@ enum class Operation : u8 {
     Remove,
     List,
     ReadFile,
+    OpenWritable,
+    Write,
+    Resize,
+    Commit,
+    Close,
 };
 
 enum class Status : u8 {
@@ -34,6 +39,7 @@ enum class Status : u8 {
     Locked,
     QuotaExceeded,
     IOError,
+    Closed,
 };
 
 struct Request {
@@ -41,6 +47,9 @@ struct Request {
     Vector<String> path {};
     String name {};
     bool option { false };
+    u64 token { 0 };
+    u64 offset { 0 };
+    ByteBuffer bytes {};
 };
 
 struct DirectoryEntry {
@@ -53,6 +62,7 @@ struct Reply {
     Vector<DirectoryEntry> entries {};
     ByteBuffer bytes {};
     i64 last_modified { 0 };
+    u64 value { 0 };
 };
 
 }

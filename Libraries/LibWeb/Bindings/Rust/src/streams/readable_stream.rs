@@ -56,7 +56,7 @@ use crate::streams::readable_stream_pipe_to::readable_stream_pipe_to;
 use crate::streams::readable_stream_tee::readable_stream_tee;
 use crate::streams::transform_stream::TransformStream;
 use crate::streams::underlying_source::{ReadableStreamController, ReadableStreamType, UnderlyingSource};
-use crate::streams::writable_stream::{WritableStream, is_writable_stream_locked};
+use crate::streams::writable_stream::{AnyWritableStream, WritableStream, is_writable_stream_locked};
 
 unsafe extern "C" {
     /// Tells Page::RenderingStats that the stream, a ReadableStream, no longer holds rendering back.
@@ -85,7 +85,7 @@ pub(crate) struct ReadableStreamGetReaderOptions {
 /// The dictionary ReadableWritablePair of Streams/ReadableStream.idl, whose members the bindings convert.
 pub(crate) struct ReadableWritablePair {
     pub(crate) readable: Ref<ReadableStream>,
-    pub(crate) writable: Ref<WritableStream>,
+    pub(crate) writable: AnyWritableStream,
 }
 
 /// The dictionary StreamPipeOptions of Streams/ReadableStream.idl, whose members the bindings convert.
@@ -342,7 +342,7 @@ impl ReadableStream {
         }
 
         // 2. If ! IsWritableStreamLocked(transform["writable"]) is true, throw a TypeError exception.
-        if is_writable_stream_locked(transform.writable) {
+        if is_writable_stream_locked(transform.writable.stream()) {
             return Err(Exception::type_error(
                 "Failed to execute 'pipeThrough' on 'ReadableStream': parameter 1's 'writable' is locked",
             ));
@@ -356,7 +356,7 @@ impl ReadableStream {
         let promise = readable_stream_pipe_to(
             cx,
             *this,
-            transform.writable,
+            transform.writable.stream(),
             options.prevent_close,
             options.prevent_abort,
             options.prevent_cancel,
@@ -374,7 +374,7 @@ impl ReadableStream {
     pub(crate) fn pipe_to(
         this: &Ref<Self>,
         cx: &mut CallContext,
-        destination: Ref<WritableStream>,
+        destination: AnyWritableStream,
         options: StreamPipeOptions,
     ) -> WebIdlResult<WebIdlPromise> {
         let cx = &this.context(cx.vm());
@@ -387,6 +387,7 @@ impl ReadableStream {
         }
 
         // 2. If ! IsWritableStreamLocked(destination) is true, return a promise rejected with a TypeError exception.
+        let destination = destination.stream();
         if is_writable_stream_locked(destination) {
             let exception = Exception::type_error(
                 "Failed to execute 'pipeTo' on 'ReadableStream':  Cannot pipe to a locked stream",

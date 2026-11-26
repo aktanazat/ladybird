@@ -42,6 +42,7 @@ private:
     Bindings::FileSystemHandleKind m_kind;
 };
 
+Page* page_for(HTML::EnvironmentSettingsObject&);
 Reply request(HTML::EnvironmentSettingsObject&, Request const&);
 void reject(JS::Realm&, WebIDL::Promise const&, Status);
 GC::Ref<WebIDL::Promise> get_directory(HTML::EnvironmentSettingsObject&);

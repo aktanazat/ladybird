@@ -172,7 +172,13 @@ WebContentPage::WebContentPage(WebContentClient& client, Web::PageId id, Canonic
 {
 }
 
-WebContentPage::~WebContentPage() = default;
+WebContentPage::~WebContentPage()
+{
+    if (m_client) {
+        if (auto* store = m_client->session().existing_origin_private_file_system())
+            store->release_all(this);
+    }
+}
 
 WebContentServerProxy* WebContentPage::routed_proxy() const
 {
@@ -663,6 +669,10 @@ void WebContentPage::fail_renderer_owned_downloads()
 
 void WebContentPage::close()
 {
+    if (m_client) {
+        if (auto* store = m_client->session().existing_origin_private_file_system())
+            store->release_all(this);
+    }
     if (m_traversable) {
         if (auto view = m_traversable->view(); view.has_value())
             Application::the().media_session_coordinator().remove({ view->view_id(), m_id, view->is_private() == IsPrivate::Yes });
@@ -1435,7 +1445,13 @@ Web::FileSystem::Reply WebContentPage::request_origin_private_file_system(Web::H
     auto* store = client().session().origin_private_file_system();
     if (!store)
         return { Web::FileSystem::Status::IOError };
-    return store->request(*key, request);
+    return store->request(this, *key, request);
+}
+
+void WebContentPage::release_origin_private_file_system(u64 token)
+{
+    if (auto* store = client().session().existing_origin_private_file_system())
+        store->release(this, token);
 }
 
 Messages::WebContentClient::ConnectToStorageAreaResponse WebContentPage::connect_to_storage_area(Web::StorageAPI::StorageEndpointType storage_endpoint, Web::HTML::EnvironmentId environment_id)

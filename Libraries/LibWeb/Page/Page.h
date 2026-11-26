@@ -938,6 +938,7 @@ public:
     virtual void page_did_request_clear_storage_for_testing(StorageAPI::StorageEndpointType, HTML::EnvironmentSettingsObject const&) { }
     virtual bool page_did_is_known_hsts_host(String const&) { return false; }
     virtual FileSystem::Reply request_origin_private_file_system(HTML::EnvironmentId const&, FileSystem::Request const&) { return {}; }
+    virtual Function<void(u64)> origin_private_file_system_release_callback() { return {}; }
 
     virtual u64 page_did_request_storage_usage([[maybe_unused]] Web::HTML::EnvironmentId const& environment_id) { return {}; }
 

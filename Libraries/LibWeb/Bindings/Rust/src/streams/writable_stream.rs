@@ -22,6 +22,8 @@ use crate::bindings::promise::{
 };
 use crate::bindings::structured_data::{TransferDataReader, TransferDataWriter, Transferable};
 use crate::bindings::{CallContext, Exception, MustNotThrow, WebIdlResult};
+#[cfg(web_idl_bindings)]
+use crate::file_system::file_system_writable_file_stream::FileSystemWritableFileStream;
 use crate::streams::abstract_operations::is_non_negative_number;
 use crate::streams::algorithms::{AbortAlgorithm, CloseAlgorithm, SizeAlgorithm, StartAlgorithm, WriteAlgorithm};
 use crate::streams::cross_realm_transform::{
@@ -62,10 +64,29 @@ pub(crate) struct PendingAbortRequest {
     pub(crate) was_already_erroring: bool,
 }
 
+#[derive(Clone, Copy, Trace)]
+#[gc(crate = libjs_rust)]
+pub(crate) enum AnyWritableStream {
+    WritableStream(Ref<WritableStream>),
+    #[cfg(web_idl_bindings)]
+    FileSystemWritableFileStream(Ref<FileSystemWritableFileStream>),
+}
+
+impl AnyWritableStream {
+    pub(crate) fn stream(self) -> Ref<WritableStream> {
+        match self {
+            Self::WritableStream(stream) => stream,
+            #[cfg(web_idl_bindings)]
+            Self::FileSystemWritableFileStream(stream) => stream.stream(),
+        }
+    }
+}
+
 // https://streams.spec.whatwg.org/#writablestream
 #[derive(Trace)]
 #[gc(crate = libjs_rust)]
 pub(crate) struct WritableStream {
+    stream_ref: Cell<Option<Ref<Self>>>,
     /// The realm of the stream, which its promises and the results of its operations are created in.
     realm: Cell<Gc<Realm>>,
     // https://streams.spec.whatwg.org/#writablestream-backpressure
@@ -99,6 +120,7 @@ impl WritableStream {
     /// A new WritableStream in the realm, which InitializeWritableStream has initialized.
     pub(crate) fn new(_: &DeferGc<'_>, realm: Gc<Realm>) -> Self {
         Self {
+            stream_ref: Cell::new(None),
             realm: Cell::new(realm),
             backpressure: Cell::new(false),
             close_request: Cell::new(None),
@@ -180,6 +202,7 @@ impl WritableStream {
 
         // 4. Perform ! InitializeWritableStream(this).
         let this = allocate(cx.vm(), |defer_gc| Self::new(defer_gc, cx.realm()));
+        initialize_writable_stream(cx.vm(), this);
 
         // 5. Let sizeAlgorithm be ! ExtractSizeAlgorithm(strategy).
         let size_algorithm = extract_size_algorithm(&strategy);
@@ -238,47 +261,51 @@ impl WritableStream {
         .must();
     }
 
+    fn stream_ref(&self) -> Ref<Self> {
+        self.stream_ref.get().expect("the writable stream is initialized")
+    }
+
     // https://streams.spec.whatwg.org/#ws-locked
-    pub(crate) fn locked(this: &Ref<Self>, _: &mut CallContext) -> WebIdlResult<bool> {
+    pub(crate) fn locked(&self, _: &mut CallContext) -> WebIdlResult<bool> {
         // 1. Return ! IsWritableStreamLocked(this).
-        Ok(is_writable_stream_locked(*this))
+        Ok(is_writable_stream_locked(self.stream_ref()))
     }
 
     // https://streams.spec.whatwg.org/#ws-abort
-    pub(crate) fn abort(this: &Ref<Self>, cx: &mut CallContext, reason: Option<Value>) -> WebIdlResult<WebIdlPromise> {
+    pub(crate) fn abort(&self, cx: &mut CallContext, reason: Option<Value>) -> WebIdlResult<WebIdlPromise> {
         // 1. If ! IsWritableStreamLocked(this) is true, return a promise rejected with a TypeError exception.
-        if is_writable_stream_locked(*this) {
+        if is_writable_stream_locked(self.stream_ref()) {
             let exception = Exception::type_error("Cannot abort a locked stream");
             return Ok(create_rejected_promise_from_exception(cx.vm(), cx.realm(), exception));
         }
 
         // 2. Return ! WritableStreamAbort(this, reason).
-        Ok(writable_stream_abort(cx, *this, reason.unwrap_or(Value::UNDEFINED)))
+        Ok(writable_stream_abort(cx, self.stream_ref(), reason.unwrap_or(Value::UNDEFINED)))
     }
 
     // https://streams.spec.whatwg.org/#ws-close
-    pub(crate) fn close(this: &Ref<Self>, cx: &mut CallContext) -> WebIdlResult<WebIdlPromise> {
+    pub(crate) fn close(&self, cx: &mut CallContext) -> WebIdlResult<WebIdlPromise> {
         // 1. If ! IsWritableStreamLocked(this) is true, return a promise rejected with a TypeError exception.
-        if is_writable_stream_locked(*this) {
+        if is_writable_stream_locked(self.stream_ref()) {
             let exception = Exception::type_error("Cannot close a locked stream");
             return Ok(create_rejected_promise_from_exception(cx.vm(), cx.realm(), exception));
         }
 
         // 2. If ! WritableStreamCloseQueuedOrInFlight(this) is true, return a promise rejected with a TypeError
         //    exception.
-        if writable_stream_close_queued_or_in_flight(*this) {
+        if writable_stream_close_queued_or_in_flight(self.stream_ref()) {
             let exception = Exception::type_error("Cannot close a stream that is already closed or errored");
             return Ok(create_rejected_promise_from_exception(cx.vm(), cx.realm(), exception));
         }
 
         // 3. Return ! WritableStreamClose(this).
-        Ok(writable_stream_close(cx, *this))
+        Ok(writable_stream_close(cx, self.stream_ref()))
     }
 
     // https://streams.spec.whatwg.org/#ws-get-writer
-    pub(crate) fn get_writer(this: &Ref<Self>, cx: &mut CallContext) -> WebIdlResult<Ref<WritableStreamDefaultWriter>> {
+    pub(crate) fn get_writer(&self, cx: &mut CallContext) -> WebIdlResult<Ref<WritableStreamDefaultWriter>> {
         // 1. Return ? AcquireWritableStreamDefaultWriter(this).
-        acquire_writable_stream_default_writer(cx, *this)
+        acquire_writable_stream_default_writer(cx, self.stream_ref())
     }
 }
 
@@ -403,6 +430,7 @@ pub(crate) fn create_writable_stream(
 
 // https://streams.spec.whatwg.org/#initialize-writable-stream
 pub(crate) fn initialize_writable_stream(vm: &Vm, stream: Ref<WritableStream>) {
+    stream.stream_ref.set(Some(stream));
     // 1. Set stream.[[state]] to "writable".
     stream.state.set(WritableStreamState::Writable);
 

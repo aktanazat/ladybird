@@ -1,6 +1,11 @@
 // https://fs.spec.whatwg.org/#api-filesystemfilehandle
 
+dictionary FileSystemCreateWritableOptions {
+    boolean keepExistingData = false;
+};
+
 [Exposed=(Window,Worker), SecureContext]
 interface FileSystemFileHandle : FileSystemHandle {
     Promise<File> getFile();
+    Promise<FileSystemWritableFileStream> createWritable(optional FileSystemCreateWritableOptions options = {});
 };

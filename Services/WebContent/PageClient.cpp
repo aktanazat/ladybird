@@ -1772,6 +1772,14 @@ bool PageClient::page_did_is_known_hsts_host(String const& domain)
     return response->result();
 }
 
+Function<void(u64)> PageClient::origin_private_file_system_release_callback()
+{
+    return [connection = client().make_weak_ptr<ConnectionFromClient>(), page_id = m_id](u64 token) {
+        if (auto client = connection.strong_ref(); client && client->is_open())
+            client->async_release_origin_private_file_system(page_id, token);
+    };
+}
+
 Web::FileSystem::Reply PageClient::request_origin_private_file_system(Web::HTML::EnvironmentId const& environment_id, Web::FileSystem::Request const& request)
 {
     auto response = client().send_sync_but_allow_failure<Messages::WebContentClient::RequestOriginPrivateFileSystem>(m_id, environment_id, request);
